@@ -40,7 +40,19 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			params:         params,
 			handlers:       handlers,
 		}
-		c.Next()
+		if err := c.Next(); err != nil {
+			if errors.Is(err, ErrMissingParam) {
+				w.WriteHeader(http.StatusBadRequest)
+			} else if errors.Is(err, ErrBadRequest) {
+				w.WriteHeader(http.StatusBadRequest)
+			} else if errors.Is(err, ErrNotFound) {
+				w.WriteHeader(http.StatusNotFound)
+			} else if errors.Is(err, ErrMethodNotAllowed) {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}
 		return
 	}
 	if errors.Is(err, ErrNotFound) {
