@@ -1,11 +1,11 @@
 package ws
 
 import (
-	"/net/http"
 	"encoding/json"
 	"encoding/xml"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"time"
 )
 
@@ -13,9 +13,12 @@ import (
 type Context struct {
 	Request        *http.Request
 	ResponseWriter http.ResponseWriter
+	Data           map[string]interface{}
 
-	group  *Group
-	params map[string]string
+	app      *App
+	params   map[string]string
+	handlers [][]func(*Context) error
+	index    int
 }
 
 // Param returns the parameter by key.
@@ -24,7 +27,7 @@ func (a *Context) Param(key string) (string, error) {
 		return p, nil
 	}
 	if a.Request.Form == nil {
-		if a.Request.ParseMultipartForm(a.group.maxFormSize) != nil {
+		if a.Request.ParseMultipartForm(a.app.maxMemory) != nil {
 			return "", ErrBadRequest
 		}
 	}
@@ -61,7 +64,7 @@ func (a *Context) ParamXML(key string, v interface{}) error {
 // ParamFile returns the file parameter by key.
 func (a *Context) ParamFile(key string) (multipart.File, *multipart.FileHeader, error) {
 	if a.Request.MultipartForm == nil {
-		if a.Request.ParseMultipartForm(a.group.maxFormSize) != nil {
+		if a.Request.ParseMultipartForm(a.app.maxMemory) != nil {
 			return nil, nil, ErrBadRequest
 		}
 	}
@@ -122,4 +125,27 @@ func (a *Context) File(name string) error {
 func (a *Context) Content(name string, modtime time.Time, content io.ReadSeeker) error {
 	http.ServeContent(a.ResponseWriter, a.Request, name, modtime, content)
 	return nil
+}
+
+// Next calls the next handler.
+func (a *Context) Next() error {
+	if len(a.handlers) <= 0 {
+		return nil
+	}
+	hs := a.handlers[0]
+	if a.index >= len(hs) {
+		a.index = 0
+		a.handlers = a.handlers[1:]
+		return a.Next()
+	}
+
+	return hs[a.index](&Context{
+		Request:        a.Request,
+		ResponseWriter: a.ResponseWriter,
+		Data:           a.Data,
+		app:            a.app,
+		params:         a.params,
+		handlers:       a.handlers,
+		index:          a.index + 1,
+	})
 }
