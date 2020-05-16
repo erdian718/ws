@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -97,6 +98,7 @@ func (a *Context) Text(v string) error {
 func (a *Context) JSON(v interface{}) error {
 	b, err := json.Marshal(v)
 	if err != nil {
+		a.ResponseWriter.WriteHeader(http.StatusInternalServerError)
 		return err
 	}
 	a.ResponseWriter.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -108,6 +110,7 @@ func (a *Context) JSON(v interface{}) error {
 func (a *Context) XML(v interface{}) error {
 	b, err := xml.Marshal(v)
 	if err != nil {
+		a.ResponseWriter.WriteHeader(http.StatusInternalServerError)
 		return err
 	}
 	a.ResponseWriter.Header().Set("Content-Type", "application/xml; charset=UTF-8")
@@ -117,8 +120,23 @@ func (a *Context) XML(v interface{}) error {
 
 // File responses the file content.
 func (a *Context) File(name string) error {
-	http.ServeFile(a.ResponseWriter, a.Request, name)
-	return nil
+	f, err := os.Open(name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			a.ResponseWriter.WriteHeader(http.StatusNotFound)
+		} else {
+			a.ResponseWriter.WriteHeader(http.StatusInternalServerError)
+		}
+		return err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		a.ResponseWriter.WriteHeader(http.StatusInternalServerError)
+		return err
+	}
+	return a.Content(info.Name(), info.ModTime(), f)
 }
 
 // Content responses the content.
