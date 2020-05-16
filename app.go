@@ -22,6 +22,12 @@ func New() *App {
 	}
 }
 
+// MaxMemory sets the max memory per request of the app.
+func (a *App) MaxMemory(s int64) *App {
+	a.maxMemory = s
+	return a
+}
+
 // ServeHTTP dispatches the request to the handler whose pattern most closely matches the request URL.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	params, handlers, err := a.Router.match(r.Method, r.URL.Path, make(map[string]string), nil)
@@ -46,4 +52,14 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusInternalServerError)
+}
+
+// Run runs the app at addr.
+func (a *App) Run(addr string) error {
+	return http.ListenAndServe(addr, a)
+}
+
+// RunTLS runs the app at addr.
+func (a *App) RunTLS(addr string, certfile, keyfile string) error {
+	return http.ListenAndServeTLS(addr, certfile, keyfile, a)
 }
