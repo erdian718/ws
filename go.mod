@@ -1,3 +1,5 @@
 module github.com/ofunc/ws
 
 go 1.14
+
+require go.etcd.io/bbolt v1.3.4

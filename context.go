@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -28,8 +29,8 @@ func (a *Context) Param(key string) (string, error) {
 		return p, nil
 	}
 	if a.Request.Form == nil {
-		if a.Request.ParseMultipartForm(a.app.maxMemory) != nil {
-			return "", ErrBadRequest
+		if err := a.Request.ParseMultipartForm(a.app.maxMemory); err != nil {
+			return "", fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
 		}
 	}
 	if ps := a.Request.Form[key]; len(ps) > 0 {
@@ -44,8 +45,8 @@ func (a *Context) ParamJSON(key string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	if json.Unmarshal([]byte(p), v) != nil {
-		return ErrBadRequest
+	if err := json.Unmarshal([]byte(p), v); err != nil {
+		return fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
 	}
 	return nil
 }
@@ -56,8 +57,8 @@ func (a *Context) ParamXML(key string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	if xml.Unmarshal([]byte(p), v) != nil {
-		return ErrBadRequest
+	if err := xml.Unmarshal([]byte(p), v); err != nil {
+		return fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
 	}
 	return nil
 }
@@ -65,15 +66,15 @@ func (a *Context) ParamXML(key string, v interface{}) error {
 // ParamFile returns the file parameter by key.
 func (a *Context) ParamFile(key string) (multipart.File, *multipart.FileHeader, error) {
 	if a.Request.MultipartForm == nil {
-		if a.Request.ParseMultipartForm(a.app.maxMemory) != nil {
-			return nil, nil, ErrBadRequest
+		if err := a.Request.ParseMultipartForm(a.app.maxMemory); err != nil {
+			return nil, nil, fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
 		}
 	}
 	if a.Request.MultipartForm != nil && a.Request.MultipartForm.File != nil {
 		if fhs := a.Request.MultipartForm.File[key]; len(fhs) > 0 {
 			f, err := fhs[0].Open()
 			if err != nil {
-				return nil, nil, ErrBadRequest
+				return nil, nil, fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
 			}
 			return f, fhs[0], nil
 		}
