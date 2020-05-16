@@ -73,7 +73,7 @@ func (a *Router) Router(pattern string) *Router {
 			children: make(map[string]*Router),
 			handlers: make(map[string][](func(*Context) error)),
 		}
-		if k[0] == ':' {
+		if k[0] == ':' || k == "*" {
 			if len(k) < 1 {
 				panic("ws: empty router parameter")
 			}
@@ -85,7 +85,7 @@ func (a *Router) Router(pattern string) *Router {
 		a.children[k] = r
 	}
 
-	if i < 0 {
+	if i < 0 || k == "*" {
 		return r
 	}
 	return r.Router(pattern[i:])
@@ -120,7 +120,11 @@ func (a *Router) match(method string, path string, parameters map[string]string,
 	}
 	if a.param != "" {
 		if r, ok := a.children[a.param]; ok {
-			parameters[a.param[1:]] = k
+			if a.param == "*" {
+				parameters[a.param] = path
+			} else {
+				parameters[a.param[1:]] = k
+			}
 			if len(r.middlewares) > 0 {
 				handlers = append(handlers, r.middlewares)
 			}
