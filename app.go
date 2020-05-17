@@ -2,27 +2,31 @@ package ws
 
 import (
 	"errors"
+	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 )
 
 // App is the app entity.
 type App struct {
-	root      string
-	dir       string
-	maxMemory int64
-	router    *Router
+	router       *Router
+	root         string
+	dir          string
+	maxMemory    int64
+	errorHandler func(*http.Request, error)
 }
 
 // New creates a new app.
 func New() *App {
 	return &App{
-		maxMemory: 32 << 20,
 		router: &Router{
 			children: make(map[string]*Router),
 			handlers: make(map[string][]func(*Context) error),
+		},
+		maxMemory: 32 << 20,
+		errorHandler: func(r *http.Request, err error) {
+			log.Println(r.Method, r.URL, err)
 		},
 	}
 }
@@ -31,6 +35,12 @@ func New() *App {
 func (a *App) Static(root, dir string) *App {
 	a.root = root
 	a.dir = dir
+	return a
+}
+
+// ErrorHandler sets error handler.
+func (a *App) ErrorHandler(h func(*http.Request, error)) *App {
+	a.errorHandler = h
 	return a
 }
 
@@ -66,19 +76,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			params:         params,
 			handlers:       handlers,
 		}
-		if err := c.Next(); err != nil {
-			if errors.Is(err, ErrMissingParam) {
-				w.WriteHeader(http.StatusBadRequest)
-			} else if errors.Is(err, ErrBadRequest) {
-				w.WriteHeader(http.StatusBadRequest)
-			} else if errors.Is(err, ErrNotFound) {
-				w.WriteHeader(http.StatusNotFound)
-			} else if errors.Is(err, ErrMethodNotAllowed) {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-			}
-		}
+		handleError(w, r, c.Next(), a.errorHandler)
 		return
 	}
 	if errors.Is(err, ErrMethodNotAllowed) {
@@ -89,24 +87,8 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if path[len(path)-1] == '/' {
 			path = path + "index.html"
 		}
-		path = strings.TrimPrefix(filepath.Clean(filepath.FromSlash(path)), a.root)
-		f, err := os.Open(filepath.Join(a.dir, path))
-		if err != nil {
-			if os.IsNotExist(err) {
-				w.WriteHeader(http.StatusNotFound)
-			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-			}
-			return
-		}
-		defer f.Close()
-
-		stat, err := f.Stat()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		http.ServeContent(w, r, f.Name(), stat.ModTime(), f)
+		path = filepath.Clean(filepath.FromSlash(strings.TrimPrefix(path, a.root)))
+		handleError(w, r, sendFile(w, r, path), a.errorHandler)
 		return
 	}
 	w.WriteHeader(http.StatusInternalServerError)

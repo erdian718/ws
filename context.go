@@ -7,7 +7,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -139,20 +138,7 @@ func (a *Context) XML(v interface{}) error {
 
 // File responses the file content.
 func (a *Context) File(name string) error {
-	f, err := os.Open(name)
-	if err != nil {
-		if os.IsNotExist(err) {
-			err = a.NotFound(err)
-		}
-		return err
-	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	return a.Content(info.Name(), info.ModTime(), f)
+	return sendFile(a.ResponseWriter, a.Request, name)
 }
 
 // Content responses the content.
