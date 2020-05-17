@@ -2,6 +2,7 @@ package ws
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -62,6 +63,12 @@ func (a *App) RunTLS(addr string, certfile, keyfile string) error {
 
 // ServeHTTP dispatches the request to the handler whose pattern most closely matches the request URL.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if e := recover(); e != nil {
+			handleError(w, r, fmt.Errorf("%w: %v", ErrInternalServerError, e), a.errorHandler)
+		}
+	}()
+
 	path := r.URL.Path
 	if len(path) <= 0 || path[0] != '/' {
 		path = "/" + path
