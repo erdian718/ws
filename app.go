@@ -91,11 +91,14 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, ErrNotFound) {
-		if path[len(path)-1] == '/' {
-			path = path + "index.html"
+		if r.Method == "GET" {
+			if path[len(path)-1] == '/' {
+				path = path + "index.html"
+			}
+			path = filepath.Join(a.dir, filepath.Clean(filepath.FromSlash(strings.TrimPrefix(path, a.root))))
+			err = sendFile(w, r, path)
 		}
-		path = filepath.Clean(filepath.FromSlash(strings.TrimPrefix(path, a.root)))
-		handleError(w, r, sendFile(w, r, path), a.errorHandler)
+		handleError(w, r, err, a.errorHandler)
 		return
 	}
 	w.WriteHeader(http.StatusInternalServerError)
