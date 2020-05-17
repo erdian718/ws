@@ -53,7 +53,7 @@ func (a *App) RunTLS(addr string, certfile, keyfile string) error {
 // ServeHTTP dispatches the request to the handler whose pattern most closely matches the request URL.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
-	if path[0] != '/' {
+	if len(path) <= 0 || path[0] != '/' {
 		path = "/" + path
 	}
 	params, handlers, err := a.router.match(r.Method, path, make(map[string]string), nil)
@@ -61,8 +61,8 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c := &Context{
 			Request:        r,
 			ResponseWriter: w,
-			Data:           make(map[string]interface{}),
 			app:            a,
+			data:           make(map[string]interface{}),
 			params:         params,
 			handlers:       handlers,
 		}
@@ -86,18 +86,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, ErrNotFound) {
-		path := r.URL.Path
-		if len(path) <= 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if path[0] != '/' {
-			path = "/" + path
-		}
 		if path[len(path)-1] == '/' {
 			path = path + "index.html"
 		}
-
 		path = strings.TrimPrefix(filepath.Clean(filepath.FromSlash(path)), a.root)
 		f, err := os.Open(filepath.Join(a.dir, path))
 		if err != nil {

@@ -55,7 +55,7 @@ func (a *Router) Handle(method string, pattern string, h func(*Context) error, h
 // Router finds the router by pattern.
 func (a *Router) Router(pattern string) *Router {
 	if len(pattern) <= 0 || pattern[0] != '/' {
-		panic("ws: invalid router patttern" + pattern)
+		panic("ws: invalid router patttern: " + pattern)
 	}
 	pattern = pattern[1:]
 	i := strings.IndexRune(pattern, '/')
@@ -73,10 +73,7 @@ func (a *Router) Router(pattern string) *Router {
 			children: make(map[string]*Router),
 			handlers: make(map[string][](func(*Context) error)),
 		}
-		if k[0] == ':' || k == "*" {
-			if len(k) < 1 {
-				panic("ws: empty router parameter")
-			}
+		if len(k) > 1 && k[0] == ':' {
 			if a.param != "" {
 				panic("ws: conflict between parameters " + a.param + " and " + k)
 			}
@@ -85,7 +82,7 @@ func (a *Router) Router(pattern string) *Router {
 		a.children[k] = r
 	}
 
-	if i < 0 || k == "*" {
+	if i < 0 {
 		return r
 	}
 	return r.Router(pattern[i:])
@@ -109,7 +106,7 @@ func (a *Router) match(method string, path string, parameters map[string]string,
 		k = path[:i]
 	}
 
-	if a.param != "" {
+	if len(a.param) > 1 {
 		if r, ok := a.children[a.param]; ok {
 			parameters[a.param[1:]] = k
 			if i < 0 {

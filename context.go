@@ -15,12 +15,22 @@ import (
 type Context struct {
 	Request        *http.Request
 	ResponseWriter http.ResponseWriter
-	Data           map[string]interface{}
 
 	app      *App
+	data     map[string]interface{}
 	params   map[string]string
 	handlers [][]func(*Context) error
 	index    int
+}
+
+// Get gets the context data.
+func (a *Context) Get(key string) interface{} {
+	return a.data[key]
+}
+
+// Set sets the context data.
+func (a *Context) Set(key string, value interface{}) {
+	a.data[key] = value
 }
 
 // Param returns the parameter by key.
@@ -30,7 +40,7 @@ func (a *Context) Param(key string) (string, error) {
 	}
 	if a.Request.Form == nil {
 		if err := a.Request.ParseMultipartForm(a.app.maxMemory); err != nil {
-			return "", fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
+			return "", a.BadRequest(err)
 		}
 	}
 	if ps := a.Request.Form[key]; len(ps) > 0 {
@@ -46,7 +56,7 @@ func (a *Context) ParamJSON(key string, v interface{}) error {
 		return err
 	}
 	if err := json.Unmarshal([]byte(p), v); err != nil {
-		return fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
+		return a.BadRequest(err)
 	}
 	return nil
 }
@@ -58,7 +68,7 @@ func (a *Context) ParamXML(key string, v interface{}) error {
 		return err
 	}
 	if err := xml.Unmarshal([]byte(p), v); err != nil {
-		return fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
+		return a.BadRequest(err)
 	}
 	return nil
 }
@@ -67,14 +77,14 @@ func (a *Context) ParamXML(key string, v interface{}) error {
 func (a *Context) ParamFile(key string) (multipart.File, *multipart.FileHeader, error) {
 	if a.Request.MultipartForm == nil {
 		if err := a.Request.ParseMultipartForm(a.app.maxMemory); err != nil {
-			return nil, nil, fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
+			return nil, nil, a.BadRequest(err)
 		}
 	}
 	if a.Request.MultipartForm != nil && a.Request.MultipartForm.File != nil {
 		if fhs := a.Request.MultipartForm.File[key]; len(fhs) > 0 {
 			f, err := fhs[0].Open()
 			if err != nil {
-				return nil, nil, fmt.Errorf("%w: %v", ErrBadRequest, err.Error())
+				return nil, nil, a.BadRequest(err)
 			}
 			return f, fhs[0], nil
 		}
@@ -86,6 +96,16 @@ func (a *Context) ParamFile(key string) (multipart.File, *multipart.FileHeader, 
 func (a *Context) Status(code int) error {
 	a.ResponseWriter.WriteHeader(code)
 	return nil
+}
+
+// BadRequest wraps ErrBadRequest with err.
+func (a *Context) BadRequest(err error) error {
+	return fmt.Errorf("%w: %v", ErrBadRequest, err)
+}
+
+// NotFound wraps ErrNotFound with err.
+func (a *Context) NotFound(err error) error {
+	return fmt.Errorf("%w: %v", ErrNotFound, err)
 }
 
 // Text responses the text content.
@@ -122,7 +142,7 @@ func (a *Context) File(name string) error {
 	f, err := os.Open(name)
 	if err != nil {
 		if os.IsNotExist(err) {
-			err = ErrNotFound
+			err = a.NotFound(err)
 		}
 		return err
 	}
@@ -130,7 +150,6 @@ func (a *Context) File(name string) error {
 
 	info, err := f.Stat()
 	if err != nil {
-		a.ResponseWriter.WriteHeader(http.StatusInternalServerError)
 		return err
 	}
 	return a.Content(info.Name(), info.ModTime(), f)
@@ -157,8 +176,8 @@ func (a *Context) Next() error {
 	return hs[a.index](&Context{
 		Request:        a.Request,
 		ResponseWriter: a.ResponseWriter,
-		Data:           a.Data,
 		app:            a.app,
+		data:           a.data,
 		params:         a.params,
 		handlers:       a.handlers,
 		index:          a.index + 1,
