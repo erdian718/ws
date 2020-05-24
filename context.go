@@ -39,9 +39,7 @@ func (a *Context) Param(key string) (string, error) {
 		return p, nil
 	}
 	if a.Request.Form == nil {
-		if err := a.Request.ParseMultipartForm(a.app.maxMemory); err != nil {
-			return "", a.BadRequest(err)
-		}
+		a.Request.ParseMultipartForm(a.app.maxMemory)
 	}
 	if ps := a.Request.Form[key]; len(ps) > 0 {
 		return ps[0], nil
