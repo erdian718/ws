@@ -16,6 +16,7 @@ type Context struct {
 	ResponseWriter http.ResponseWriter
 
 	app      *App
+	status   int
 	data     map[string]interface{}
 	params   map[string]string
 	handlers [][]func(*Context) error
@@ -91,6 +92,12 @@ func (a *Context) ParamFile(key string) (multipart.File, *multipart.FileHeader, 
 	return nil, nil, ErrMissingParam
 }
 
+// SetStatus sets the status code.
+func (a *Context) SetStatus(code int) *Context {
+	a.status = code
+	return a
+}
+
 // Status responses the status code.
 func (a *Context) Status(code int) error {
 	a.ResponseWriter.WriteHeader(code)
@@ -110,6 +117,7 @@ func (a *Context) NotFound(err error) error {
 // Text responses the text content.
 func (a *Context) Text(v string) error {
 	a.ResponseWriter.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+	a.writeHeader()
 	a.ResponseWriter.Write([]byte(v))
 	return nil
 }
@@ -121,6 +129,7 @@ func (a *Context) JSON(v interface{}) error {
 		return err
 	}
 	a.ResponseWriter.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	a.writeHeader()
 	a.ResponseWriter.Write(b)
 	return nil
 }
@@ -132,6 +141,7 @@ func (a *Context) XML(v interface{}) error {
 		return err
 	}
 	a.ResponseWriter.Header().Set("Content-Type", "application/xml; charset=UTF-8")
+	a.writeHeader()
 	a.ResponseWriter.Write(b)
 	return nil
 }
@@ -168,4 +178,18 @@ func (a *Context) Next() error {
 		handlers:       a.handlers,
 		index:          a.index + 1,
 	})
+}
+
+func (a *Context) writeHeader() {
+	if a.status == 0 {
+		switch a.Request.Method {
+		case "POST":
+			a.status = http.StatusCreated
+		case "DELETE":
+			a.status = http.StatusNoContent
+		default:
+			a.status = http.StatusOK
+		}
+	}
+	a.ResponseWriter.WriteHeader(a.status)
 }
