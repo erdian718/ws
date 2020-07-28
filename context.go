@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -153,6 +155,19 @@ func (a *Context) File(name string) error {
 func (a *Context) Content(name string, modtime time.Time, content io.ReadSeeker) error {
 	http.ServeContent(a.ResponseWriter, a.Request, name, modtime, content)
 	return nil
+}
+
+// RealIP returns the real client IP.
+func (a *Context) RealIP() string {
+	header := a.Request.Header
+	if ip := header.Get("X-Forwarded-For"); ip != "" {
+		return strings.TrimSpace(strings.Split(ip, ",")[0])
+	}
+	if ip := header.Get("X-Real-IP"); ip != "" {
+		return strings.TrimSpace(ip)
+	}
+	ra, _, _ := net.SplitHostPort(a.Request.RemoteAddr)
+	return ra
 }
 
 // Next calls the next handler.
