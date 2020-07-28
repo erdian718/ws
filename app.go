@@ -91,7 +91,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, ErrNotFound) {
-		if r.Method == "GET" {
+		if r.Method == "GET" && a.dir != "" {
 			if path[len(path)-1] == '/' {
 				path = path + "index.html"
 			}
