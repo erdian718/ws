@@ -96,7 +96,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				path = path + "index.html"
 			}
 			path = filepath.Join(a.dir, filepath.Clean(filepath.FromSlash(strings.TrimPrefix(path, a.root))))
-			err = sendFile(w, r, path)
+			err = serveFile(w, r, path)
 		}
 		handleError(w, r, err, a.errorHandler)
 		return

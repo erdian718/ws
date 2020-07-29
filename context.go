@@ -148,7 +148,7 @@ func (a *Context) XML(v interface{}) error {
 
 // File responses the file content.
 func (a *Context) File(name string) error {
-	return sendFile(a.ResponseWriter, a.Request, name)
+	return serveFile(a.ResponseWriter, a.Request, name)
 }
 
 // Content responses the content.

@@ -7,16 +7,7 @@ import (
 	"os"
 )
 
-// Errors.
-var (
-	ErrMissingParam        = errors.New("ws: missing parameter")
-	ErrBadRequest          = errors.New(http.StatusText(http.StatusBadRequest))
-	ErrNotFound            = errors.New(http.StatusText(http.StatusNotFound))
-	ErrMethodNotAllowed    = errors.New(http.StatusText(http.StatusMethodNotAllowed))
-	ErrInternalServerError = errors.New(http.StatusText(http.StatusInternalServerError))
-)
-
-func sendFile(w http.ResponseWriter, r *http.Request, name string) error {
+func serveFile(w http.ResponseWriter, r *http.Request, name string) error {
 	f, err := os.Open(name)
 	if err != nil {
 		if os.IsNotExist(err) {
