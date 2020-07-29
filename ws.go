@@ -1,8 +1,6 @@
 package ws
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"os"
 )
@@ -11,7 +9,7 @@ func serveFile(w http.ResponseWriter, r *http.Request, name string) error {
 	f, err := os.Open(name)
 	if err != nil {
 		if os.IsNotExist(err) {
-			err = fmt.Errorf("%w: %v", ErrNotFound, err)
+			err = NotFound(err.Error())
 		}
 		return err
 	}
@@ -25,21 +23,20 @@ func serveFile(w http.ResponseWriter, r *http.Request, name string) error {
 	return nil
 }
 
-func handleError(w http.ResponseWriter, r *http.Request, err error, h func(*http.Request, error)) {
-	if err != nil {
-		if errors.Is(err, ErrMissingParam) {
-			w.WriteHeader(http.StatusBadRequest)
-		} else if errors.Is(err, ErrBadRequest) {
-			w.WriteHeader(http.StatusBadRequest)
-		} else if errors.Is(err, ErrNotFound) {
-			w.WriteHeader(http.StatusNotFound)
-		} else if errors.Is(err, ErrMethodNotAllowed) {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		if h != nil {
-			h(r, err)
-		}
+func handleError(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
 	}
+
+	var code int
+	if e, ok := err.(*Error); ok {
+		if e.code == 0 {
+			code = http.StatusBadRequest
+		} else {
+			code = e.code
+		}
+	} else {
+		code = http.StatusInternalServerError
+	}
+	w.WriteHeader(code)
 }

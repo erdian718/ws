@@ -3,7 +3,6 @@ package ws
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -11,11 +10,8 @@ import (
 
 // App is the app entity.
 type App struct {
-	router       *Router
-	root         string
-	dir          string
-	maxMemory    int64
-	errorHandler func(*http.Request, error)
+	*Router
+	maxMemory int64
 }
 
 // New creates a new app.
@@ -26,23 +22,7 @@ func New() *App {
 			handlers: make(map[string][]func(*Context) error),
 		},
 		maxMemory: 32 << 20,
-		errorHandler: func(r *http.Request, err error) {
-			log.Println(r.Method, r.URL, err)
-		},
 	}
-}
-
-// Static servers static file.
-func (a *App) Static(root, dir string) *App {
-	a.root = root
-	a.dir = dir
-	return a
-}
-
-// ErrorHandler sets error handler.
-func (a *App) ErrorHandler(h func(*http.Request, error)) *App {
-	a.errorHandler = h
-	return a
 }
 
 // MaxMemory sets the max memory per request of the app.
@@ -65,7 +45,7 @@ func (a *App) RunTLS(addr string, certfile, keyfile string) error {
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if e := recover(); e != nil {
-			handleError(w, r, fmt.Errorf("%w: %v", ErrInternalServerError, e), a.errorHandler)
+			handleError(w, fmt.Errorf("%v", e))
 		}
 	}()
 
@@ -102,55 +82,4 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusInternalServerError)
-}
-
-// Use uses the middlewares.
-func (a *App) Use(h func(*Context) error, hs ...func(*Context) error) *App {
-	middlewares := append(a.router.middlewares, h)
-	a.router.middlewares = append(middlewares, hs...)
-	return a
-}
-
-// Get registers the handler for the given pattern and method GET.
-func (a *App) Get(pattern string, h func(*Context) error, hs ...func(*Context) error) *App {
-	a.router.Get(pattern, h, hs...)
-	return a
-}
-
-// Post registers the handler for the given pattern and method POST.
-func (a *App) Post(pattern string, h func(*Context) error, hs ...func(*Context) error) *App {
-	a.router.Post(pattern, h, hs...)
-	return a
-}
-
-// Put registers the handler for the given pattern and method PUT.
-func (a *App) Put(pattern string, h func(*Context) error, hs ...func(*Context) error) *App {
-	a.router.Put(pattern, h, hs...)
-	return a
-}
-
-// Patch registers the handler for the given pattern and method PATCH.
-func (a *App) Patch(pattern string, h func(*Context) error, hs ...func(*Context) error) *App {
-	a.router.Patch(pattern, h, hs...)
-	return a
-}
-
-// Delete registers the handler for the given pattern and method DELETE.
-func (a *App) Delete(pattern string, h func(*Context) error, hs ...func(*Context) error) *App {
-	a.router.Delete(pattern, h, hs...)
-	return a
-}
-
-// Handle registers the handler for the given pattern and method.
-func (a *App) Handle(method string, pattern string, h func(*Context) error, hs ...func(*Context) error) *App {
-	a.router.Handle(method, pattern, h, hs...)
-	return a
-}
-
-// Router finds the router by pattern.
-func (a *App) Router(pattern string) *Router {
-	if pattern == "" {
-		return a.router
-	}
-	return a.router.Router(pattern)
 }

@@ -1,6 +1,9 @@
 package ws
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 // Error is the ws error.
 type Error struct {
@@ -13,49 +16,41 @@ func (a *Error) Error() string {
 	return "ws: " + a.text
 }
 
-// IsMissingParamError checks if the error is missing param.
-func IsMissingParamError(err error) bool {
+// IsMissingParam checks if the error is missing param.
+func IsMissingParam(err error) bool {
 	if e, ok := err.(*Error); ok {
 		return e.code == 0
 	}
 	return false
 }
 
-// MissingParamError creates a missing param error.
-func MissingParamError(text string) error {
+// MissingParam creates a missing param error.
+func MissingParam(v interface{}) error {
 	return &Error{
-		text: "missing param: " + text,
+		text: fmt.Sprintf("missing param: %v", v),
 	}
 }
 
-// BadRequestError creates a bad request error.
-func BadRequestError(text string) error {
+// BadRequest creates a bad request error.
+func BadRequest(v interface{}) error {
 	return &Error{
 		code: http.StatusBadRequest,
-		text: "bad request: " + text,
+		text: fmt.Sprintf("bad request: %v", v),
 	}
 }
 
-// NotFoundError creates a not found error.
-func NotFoundError(text string) error {
+// NotFound creates a not found error.
+func NotFound(v interface{}) error {
 	return &Error{
 		code: http.StatusNotFound,
-		text: "not found: " + text,
+		text: fmt.Sprintf("not found: %v", v),
 	}
 }
 
-// MethodNotAllowedError creates a method not allowed error.
-func MethodNotAllowedError(text string) error {
+// MethodNotAllowed creates a method not allowed error.
+func MethodNotAllowed(v interface{}) error {
 	return &Error{
 		code: http.StatusMethodNotAllowed,
-		text: "method not allowed: " + text,
-	}
-}
-
-// InternalServerError creates a internal server error.
-func InternalServerError(text string) error {
-	return &Error{
-		code: http.StatusInternalServerError,
-		text: "internal server error: " + text,
+		text: fmt.Sprintf("method not allowed: %v", v),
 	}
 }
