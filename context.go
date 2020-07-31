@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -17,9 +19,9 @@ type Context struct {
 	ResponseWriter http.ResponseWriter
 	Path           string
 
-	app    *App
 	datas  map[string]interface{}
 	params map[string]string
+	querys url.Values
 	router *Router
 	index  int
 }
@@ -33,9 +35,9 @@ func (a *Context) Next() error {
 			ResponseWriter: a.ResponseWriter,
 			Path:           a.Path,
 
-			app:    a.app,
 			datas:  a.datas,
 			params: a.params,
+			querys: a.querys,
 			router: a.router,
 			index:  a.index + 1,
 		})
@@ -54,9 +56,9 @@ func (a *Context) Next() error {
 			ResponseWriter: a.ResponseWriter,
 			Path:           a.Path,
 
-			app:    a.app,
 			datas:  a.datas,
 			params: a.params,
+			querys: a.querys,
 			router: a.router,
 			index:  a.index + 1,
 		})
@@ -75,25 +77,12 @@ func (a *Context) Next() error {
 		ResponseWriter: a.ResponseWriter,
 		Path:           path,
 
-		app:    a.app,
 		datas:  a.datas,
 		params: a.params,
+		querys: a.querys,
 		router: router,
 		index:  -len(router.middlewares),
 	}).Next()
-}
-
-// RealIP returns the real client IP.
-func (a *Context) RealIP() string {
-	header := a.Request.Header
-	if ip := header.Get("X-Forwarded-For"); ip != "" {
-		return strings.TrimSpace(strings.Split(ip, ",")[0])
-	}
-	if ip := header.Get("X-Real-IP"); ip != "" {
-		return strings.TrimSpace(ip)
-	}
-	ra, _, _ := net.SplitHostPort(a.Request.RemoteAddr)
-	return ra
 }
 
 // Get gets the context data.
@@ -104,6 +93,47 @@ func (a *Context) Get(key string) interface{} {
 // Set sets the context data.
 func (a *Context) Set(key string, value interface{}) {
 	a.datas[key] = value
+}
+
+// Param return the param by key.
+func (a *Context) Param(key string) string {
+	return a.params[key]
+}
+
+// Query returns the first value associated with the given key.
+func (a *Context) Query(key string) string {
+	if a.querys == nil {
+		a.querys, _ = url.ParseQuery(a.Request.URL.RawQuery)
+	}
+	return a.querys.Get(key)
+}
+
+// FormValue returns the first value for the named component of the request body.
+func (a *Context) FormValue(key string) string {
+	return a.Request.PostFormValue(key)
+}
+
+// FormFile returns the first file for the provided form key.
+func (a *Context) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
+	return a.Request.FormFile(key)
+}
+
+// ParseJSON parse the JSON data.
+func (a *Context) ParseJSON(value interface{}) error {
+	err := json.NewDecoder(a.Request.Body).Decode(value)
+	if err != nil {
+		err = Status(http.StatusBadRequest, err)
+	}
+	return err
+}
+
+// ParseXML parse the XML data.
+func (a *Context) ParseXML(value interface{}) error {
+	err := xml.NewDecoder(a.Request.Body).Decode(value)
+	if err != nil {
+		err = Status(http.StatusBadRequest, err)
+	}
+	return err
 }
 
 // Text responses the text content.
@@ -162,6 +192,19 @@ func (a *Context) File(name string) error {
 	return a.Content(f.Name(), stat.ModTime(), f)
 }
 
+// RealIP returns the real client IP.
+func (a *Context) RealIP() string {
+	header := a.Request.Header
+	if ip := header.Get("X-Forwarded-For"); ip != "" {
+		return strings.TrimSpace(strings.Split(ip, ",")[0])
+	}
+	if ip := header.Get("X-Real-IP"); ip != "" {
+		return strings.TrimSpace(ip)
+	}
+	ra, _, _ := net.SplitHostPort(a.Request.RemoteAddr)
+	return ra
+}
+
 func (a *Context) statusCode(code int) int {
 	if code > 0 {
 		return code
@@ -175,60 +218,3 @@ func (a *Context) statusCode(code int) int {
 		return http.StatusOK
 	}
 }
-
-// // Param returns the parameter by key.
-// func (a *Context) Param(key string) (string, error) {
-// 	if p, ok := a.params[key]; ok {
-// 		return p, nil
-// 	}
-// 	if a.Request.Form == nil {
-// 		a.Request.ParseMultipartForm(a.app.maxMemory)
-// 	}
-// 	if ps := a.Request.Form[key]; len(ps) > 0 {
-// 		return ps[0], nil
-// 	}
-// 	return "", ErrMissingParam
-// }
-
-// // ParamJSON returns the JSON parameter by key.
-// func (a *Context) ParamJSON(key string, v interface{}) error {
-// 	p, err := a.Param(key)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if err := json.Unmarshal([]byte(p), v); err != nil {
-// 		return a.BadRequest(err)
-// 	}
-// 	return nil
-// }
-
-// // ParamXML returns the XML parameter by key.
-// func (a *Context) ParamXML(key string, v interface{}) error {
-// 	p, err := a.Param(key)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if err := xml.Unmarshal([]byte(p), v); err != nil {
-// 		return a.BadRequest(err)
-// 	}
-// 	return nil
-// }
-
-// // ParamFile returns the file parameter by key.
-// func (a *Context) ParamFile(key string) (multipart.File, *multipart.FileHeader, error) {
-// 	if a.Request.MultipartForm == nil {
-// 		if err := a.Request.ParseMultipartForm(a.app.maxMemory); err != nil {
-// 			return nil, nil, a.BadRequest(err)
-// 		}
-// 	}
-// 	if a.Request.MultipartForm != nil && a.Request.MultipartForm.File != nil {
-// 		if fhs := a.Request.MultipartForm.File[key]; len(fhs) > 0 {
-// 			f, err := fhs[0].Open()
-// 			if err != nil {
-// 				return nil, nil, a.BadRequest(err)
-// 			}
-// 			return f, fhs[0], nil
-// 		}
-// 	}
-// 	return nil, nil, ErrMissingParam
-// }
