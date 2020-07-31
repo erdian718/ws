@@ -84,44 +84,26 @@ func (a *Router) Router(pattern string) *Router {
 	return r.Router(pattern[i:])
 }
 
-// func (a *Router) match(method string, path string, parameters map[string]string, handlers [][]func(*Context) error) (map[string]string, [][]func(*Context) error, error) {
-// 	if len(a.middlewares) > 0 {
-// 		handlers = append(handlers, a.middlewares)
-// 	}
+// Match matches the path.
+func (a *Router) Match(path string) (*Router, string, string) {
+	if len(path) < 1 || path[0] != '/' {
+		return nil, "", ""
+	}
+	path = path[1:]
+	i := strings.IndexRune(path, '/')
 
-// 	if len(path) <= 0 || path[0] != '/' {
-// 		return nil, nil, ErrNotFound
-// 	}
-// 	path = path[1:]
-// 	i := strings.IndexRune(path, '/')
+	var key, param string
+	if i < 0 {
+		key, path = path, ""
+	} else {
+		key, path = path[:i], path[i:]
+	}
+	if a.key != "" {
+		key, param = a.key, key
+	}
 
-// 	var k string
-// 	if i < 0 {
-// 		k = path
-// 	} else {
-// 		k = path[:i]
-// 	}
-
-// 	if len(a.key) > 1 {
-// 		if r, ok := a.children[a.key]; ok {
-// 			parameters[a.key[1:]] = k
-// 			if i < 0 {
-// 				if hs, ok := r.handlers[method]; ok {
-// 					return parameters, append(handlers, hs), nil
-// 				}
-// 				return nil, nil, ErrMethodNotAllowed
-// 			}
-// 			return r.match(method, path[i:], parameters, handlers)
-// 		}
-// 	}
-// 	if r, ok := a.children[k]; ok {
-// 		if i < 0 {
-// 			if hs, ok := r.handlers[method]; ok {
-// 				return parameters, append(handlers, hs), nil
-// 			}
-// 			return nil, nil, ErrMethodNotAllowed
-// 		}
-// 		return r.match(method, path[i:], parameters, handlers)
-// 	}
-// 	return nil, nil, ErrNotFound
-// }
+	if router, ok := a.children[key]; ok {
+		return router, path, param
+	}
+	return nil, path, param
+}
