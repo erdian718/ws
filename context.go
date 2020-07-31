@@ -175,8 +175,8 @@ func (a *Context) Content(name string, modtime time.Time, content io.ReadSeeker)
 }
 
 // File responses the file content.
-func (a *Context) File(name string) error {
-	f, err := os.Open(name)
+func (a *Context) File(path string) error {
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = Status(http.StatusNotFound, err)
