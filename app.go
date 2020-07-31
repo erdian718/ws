@@ -17,7 +17,7 @@ type App struct {
 // New creates a new app.
 func New() *App {
 	return &App{
-		router: &Router{
+		Router: &Router{
 			children: make(map[string]*Router),
 			handlers: make(map[string][]func(*Context) error),
 		},
