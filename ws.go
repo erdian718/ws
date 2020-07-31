@@ -1,15 +1,49 @@
 package ws
 
 import (
+	"fmt"
 	"net/http"
 	"os"
+	"strings"
 )
+
+// Error is the ws error.
+type Error struct {
+	code int
+	text string
+}
+
+// NewError creates a new ws error.
+func NewError(code int, msg interface{}) *Error {
+	tfmt := "missing param: %v"
+	if code > 0 {
+		if text := strings.ToLower(http.StatusText(code)); text == "" {
+			tfmt = "unknown error: %v"
+		} else {
+			tfmt = text + ": %v"
+		}
+	}
+	return &Error{
+		code: code,
+		text: fmt.Sprintf(tfmt, msg),
+	}
+}
+
+// Error returns the error string.
+func (a *Error) Error() string {
+	return "ws: " + a.text
+}
+
+// Code returns the error code.
+func (a *Error) Code() int {
+	return a.code
+}
 
 func serveFile(w http.ResponseWriter, r *http.Request, name string) error {
 	f, err := os.Open(name)
 	if err != nil {
 		if os.IsNotExist(err) {
-			err = NotFound(err.Error())
+			err = NewError(http.StatusNotFound, err)
 		}
 		return err
 	}
@@ -21,22 +55,4 @@ func serveFile(w http.ResponseWriter, r *http.Request, name string) error {
 	}
 	http.ServeContent(w, r, f.Name(), stat.ModTime(), f)
 	return nil
-}
-
-func handleError(w http.ResponseWriter, err error) {
-	if err == nil {
-		return
-	}
-
-	var code int
-	if e, ok := err.(*Error); ok {
-		if e.code == 0 {
-			code = http.StatusBadRequest
-		} else {
-			code = e.code
-		}
-	} else {
-		code = http.StatusInternalServerError
-	}
-	w.WriteHeader(code)
 }

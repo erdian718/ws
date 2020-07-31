@@ -1,11 +1,8 @@
 package ws
 
 import (
-	"errors"
-	"fmt"
+	"log"
 	"net/http"
-	"path/filepath"
-	"strings"
 )
 
 // App is the app entity.
@@ -45,41 +42,39 @@ func (a *App) RunTLS(addr string, certfile, keyfile string) error {
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if e := recover(); e != nil {
-			handleError(w, fmt.Errorf("%v", e))
+			log.Println("ws:", e)
+			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}()
 
 	path := r.URL.Path
-	if len(path) <= 0 || path[0] != '/' {
+	if len(path) < 1 || path[0] != '/' {
 		path = "/" + path
 	}
-	params, handlers, err := a.router.match(r.Method, path, make(map[string]string), nil)
-	if err == nil {
-		c := &Context{
-			Request:        r,
-			ResponseWriter: w,
-			app:            a,
-			data:           make(map[string]interface{}),
-			params:         params,
-			handlers:       handlers,
-		}
-		handleError(w, r, c.Next(), a.errorHandler)
-		return
-	}
-	if errors.Is(err, ErrMethodNotAllowed) {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	if errors.Is(err, ErrNotFound) {
-		if r.Method == "GET" && a.dir != "" {
-			if path[len(path)-1] == '/' {
-				path = path + "index.html"
+
+	err := (&Context{
+		Request:        r,
+		ResponseWriter: w,
+		Path:           path,
+
+		app:    a,
+		datas:  make(map[string]interface{}),
+		params: make(map[string]string),
+		router: a.Router,
+		index:  -len(a.Router.middlewares),
+	}).Next()
+
+	if err != nil {
+		var code int
+		if e, ok := err.(*Error); ok {
+			if e.code == 0 {
+				code = http.StatusBadRequest
+			} else {
+				code = e.code
 			}
-			path = filepath.Join(a.dir, filepath.Clean(filepath.FromSlash(strings.TrimPrefix(path, a.root))))
-			err = serveFile(w, r, path)
+		} else {
+			code = http.StatusInternalServerError
 		}
-		handleError(w, r, err, a.errorHandler)
-		return
+		w.WriteHeader(code)
 	}
-	w.WriteHeader(http.StatusInternalServerError)
 }

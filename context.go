@@ -37,7 +37,7 @@ func (a *Context) Next() error {
 	if a.Path == "" {
 		hs, ok := a.router.handlers[a.Request.Method]
 		if !ok {
-			return MethodNotAllowed(a.Request.Method + " " + a.Request.URL.Path)
+			return NewError(http.StatusMethodNotAllowed, a.Request.Method+" "+a.Request.URL.Path)
 		}
 		if a.index >= len(hs) {
 			return nil
@@ -57,7 +57,7 @@ func (a *Context) Next() error {
 
 	router, path, param := a.router.Match(a.Path)
 	if router == nil {
-		return NotFound(a.Request.URL.Path)
+		return NewError(http.StatusNotFound, a.Request.URL.Path)
 	}
 	if key := a.router.key; key != "" {
 		a.params[key[1:]] = param
