@@ -1,7 +1,14 @@
 package ws
 
 import (
+	"encoding/json"
+	"encoding/xml"
+	"io"
+	"net"
 	"net/http"
+	"os"
+	"strings"
+	"time"
 )
 
 // Context represents the context which hold the HTTP request and response.
@@ -37,7 +44,7 @@ func (a *Context) Next() error {
 	if a.Path == "" {
 		hs, ok := a.router.handlers[a.Request.Method]
 		if !ok {
-			return NewError(http.StatusMethodNotAllowed, a.Request.Method+" "+a.Request.URL.Path)
+			return Status(http.StatusMethodNotAllowed, a.Request.Method+" "+a.Request.URL.Path)
 		}
 		if a.index >= len(hs) {
 			return nil
@@ -57,7 +64,7 @@ func (a *Context) Next() error {
 
 	router, path, param := a.router.Match(a.Path)
 	if router == nil {
-		return NewError(http.StatusNotFound, a.Request.URL.Path)
+		return Status(http.StatusNotFound, a.Request.URL.Path)
 	}
 	if key := a.router.key; key != "" {
 		a.params[key[1:]] = param
@@ -76,15 +83,98 @@ func (a *Context) Next() error {
 	}).Next()
 }
 
-// // Get gets the context data.
-// func (a *Context) Get(key string) interface{} {
-// 	return a.datas[key]
-// }
+// RealIP returns the real client IP.
+func (a *Context) RealIP() string {
+	header := a.Request.Header
+	if ip := header.Get("X-Forwarded-For"); ip != "" {
+		return strings.TrimSpace(strings.Split(ip, ",")[0])
+	}
+	if ip := header.Get("X-Real-IP"); ip != "" {
+		return strings.TrimSpace(ip)
+	}
+	ra, _, _ := net.SplitHostPort(a.Request.RemoteAddr)
+	return ra
+}
 
-// // Set sets the context data.
-// func (a *Context) Set(key string, value interface{}) {
-// 	a.datas[key] = value
-// }
+// Get gets the context data.
+func (a *Context) Get(key string) interface{} {
+	return a.datas[key]
+}
+
+// Set sets the context data.
+func (a *Context) Set(key string, value interface{}) {
+	a.datas[key] = value
+}
+
+// Text responses the text content.
+func (a *Context) Text(code int, value string) error {
+	a.ResponseWriter.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+	a.ResponseWriter.WriteHeader(a.statusCode(code))
+	a.ResponseWriter.Write([]byte(value))
+	return nil
+}
+
+// JSON responses the JSON content.
+func (a *Context) JSON(code int, value interface{}) error {
+	b, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	a.ResponseWriter.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	a.ResponseWriter.WriteHeader(a.statusCode(code))
+	a.ResponseWriter.Write(b)
+	return nil
+}
+
+// XML responses the XML content.
+func (a *Context) XML(code int, value interface{}) error {
+	b, err := xml.Marshal(value)
+	if err != nil {
+		return err
+	}
+	a.ResponseWriter.Header().Set("Content-Type", "application/xml; charset=UTF-8")
+	a.ResponseWriter.WriteHeader(a.statusCode(code))
+	a.ResponseWriter.Write(b)
+	return nil
+}
+
+// Content responses the content.
+func (a *Context) Content(name string, modtime time.Time, content io.ReadSeeker) error {
+	http.ServeContent(a.ResponseWriter, a.Request, name, modtime, content)
+	return nil
+}
+
+// File responses the file content.
+func (a *Context) File(name string) error {
+	f, err := os.Open(name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = Status(http.StatusNotFound, err)
+		}
+		return err
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	return a.Content(f.Name(), stat.ModTime(), f)
+}
+
+func (a *Context) statusCode(code int) int {
+	if code > 0 {
+		return code
+	}
+	switch a.Request.Method {
+	case "POST":
+		return http.StatusCreated
+	case "DELETE":
+		return http.StatusNoContent
+	default:
+		return http.StatusOK
+	}
+}
 
 // // Param returns the parameter by key.
 // func (a *Context) Param(key string) (string, error) {
@@ -141,96 +231,4 @@ func (a *Context) Next() error {
 // 		}
 // 	}
 // 	return nil, nil, ErrMissingParam
-// }
-
-// // SetStatus sets the status code.
-// func (a *Context) SetStatus(code int) *Context {
-// 	a.status = code
-// 	return a
-// }
-
-// // Status responses the status code.
-// func (a *Context) Status(code int) error {
-// 	a.ResponseWriter.WriteHeader(code)
-// 	return nil
-// }
-
-// // BadRequest wraps ErrBadRequest with err.
-// func (a *Context) BadRequest(err error) error {
-// 	return fmt.Errorf("%w: %v", ErrBadRequest, err)
-// }
-
-// // NotFound wraps ErrNotFound with err.
-// func (a *Context) NotFound(err error) error {
-// 	return fmt.Errorf("%w: %v", ErrNotFound, err)
-// }
-
-// // Text responses the text content.
-// func (a *Context) Text(v string) error {
-// 	a.ResponseWriter.Header().Set("Content-Type", "text/plain; charset=UTF-8")
-// 	a.writeHeader()
-// 	a.ResponseWriter.Write([]byte(v))
-// 	return nil
-// }
-
-// // JSON responses the JSON content.
-// func (a *Context) JSON(v interface{}) error {
-// 	b, err := json.Marshal(v)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	a.ResponseWriter.Header().Set("Content-Type", "application/json; charset=UTF-8")
-// 	a.writeHeader()
-// 	a.ResponseWriter.Write(b)
-// 	return nil
-// }
-
-// // XML responses the XML content.
-// func (a *Context) XML(v interface{}) error {
-// 	b, err := xml.Marshal(v)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	a.ResponseWriter.Header().Set("Content-Type", "application/xml; charset=UTF-8")
-// 	a.writeHeader()
-// 	a.ResponseWriter.Write(b)
-// 	return nil
-// }
-
-// // File responses the file content.
-// func (a *Context) File(name string) error {
-// 	return serveFile(a.ResponseWriter, a.Request, name)
-// }
-
-// // Content responses the content.
-// func (a *Context) Content(name string, modtime time.Time, content io.ReadSeeker) error {
-// 	http.ServeContent(a.ResponseWriter, a.Request, name, modtime, content)
-// 	return nil
-// }
-
-// // RealIP returns the real client IP.
-// func (a *Context) RealIP() string {
-// 	header := a.Request.Header
-// 	if ip := header.Get("X-Forwarded-For"); ip != "" {
-// 		return strings.TrimSpace(strings.Split(ip, ",")[0])
-// 	}
-// 	if ip := header.Get("X-Real-IP"); ip != "" {
-// 		return strings.TrimSpace(ip)
-// 	}
-// 	ra, _, _ := net.SplitHostPort(a.Request.RemoteAddr)
-// 	return ra
-// }
-
-// func (a *Context) writeHeaderX() {
-// 	if a.status == 0 {
-// 		switch a.Request.Method {
-// 		case "POST":
-// 			a.status = http.StatusCreated
-// 		case "DELETE":
-// 			a.status = http.StatusNoContent
-// 		default:
-// 			a.status = http.StatusOK
-// 		}
-// 	}
-// 	a.ResponseWriter.WriteHeader(a.status)
 // }

@@ -66,11 +66,13 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		var code int
-		if e, ok := err.(*Error); ok {
-			if e.code == 0 {
+		if e, ok := err.(*StatusError); ok {
+			if e.isHTTPStatus {
+				code = e.code
+			} else if e.code == 0 {
 				code = http.StatusBadRequest
 			} else {
-				code = e.code
+				code = http.StatusInternalServerError
 			}
 		} else {
 			code = http.StatusInternalServerError
