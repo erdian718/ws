@@ -1,6 +1,7 @@
 package static
 
 import (
+	"net/http"
 	"path/filepath"
 
 	"github.com/ofunc/ws"
@@ -14,6 +15,15 @@ func New(root string) func(*ws.Context) error {
 				return ctx.File(filepath.Join(root, filepath.FromSlash(ctx.Path)))
 			}
 		}
-		return ctx.Next()
+
+		err := ctx.Next()
+		if err != nil {
+			if e, ok := err.(*ws.StatusError); ok {
+				if e.Code() == http.StatusNotFound {
+					return ctx.File(filepath.Join(root, filepath.FromSlash(ctx.Path), "index.html"))
+				}
+			}
+		}
+		return err
 	}
 }

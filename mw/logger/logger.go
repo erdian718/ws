@@ -8,7 +8,7 @@ import (
 )
 
 // New creates a logger middleware.
-func New(root string) func(*ws.Context) error {
+func New() func(*ws.Context) error {
 	return func(ctx *ws.Context) error {
 		err := ctx.Next()
 		if err != nil {
