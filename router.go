@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -12,24 +13,6 @@ type Router struct {
 	middlewares []func(*Context) error
 	children    map[string]*Router
 	handlers    map[string][]func(*Context) error
-}
-
-// New creates a new app.
-func New() *Router {
-	return &Router{
-		children: make(map[string]*Router),
-		handlers: make(map[string][]func(*Context) error),
-	}
-}
-
-// Run runs the server at addr.
-func (a *Router) Run(addr string) error {
-	return http.ListenAndServe(addr, a)
-}
-
-// RunTLS runs the server at addr.
-func (a *Router) RunTLS(addr string, certfile, keyfile string) error {
-	return http.ListenAndServeTLS(addr, certfile, keyfile, a)
 }
 
 // Use uses the middlewares.
@@ -47,27 +30,27 @@ func (a *Router) Handle(method string, pattern string, hs ...func(*Context) erro
 
 // Get registers the handler for the given pattern and method GET.
 func (a *Router) Get(pattern string, hs ...func(*Context) error) *Router {
-	return a.Handle("GET", pattern, hs...)
+	return a.Handle(http.MethodGet, pattern, hs...)
 }
 
 // Post registers the handler for the given pattern and method POST.
 func (a *Router) Post(pattern string, hs ...func(*Context) error) *Router {
-	return a.Handle("POST", pattern, hs...)
+	return a.Handle(http.MethodPost, pattern, hs...)
 }
 
 // Put registers the handler for the given pattern and method PUT.
 func (a *Router) Put(pattern string, hs ...func(*Context) error) *Router {
-	return a.Handle("PUT", pattern, hs...)
+	return a.Handle(http.MethodPut, pattern, hs...)
 }
 
 // Patch registers the handler for the given pattern and method PATCH.
 func (a *Router) Patch(pattern string, hs ...func(*Context) error) *Router {
-	return a.Handle("PATCH", pattern, hs...)
+	return a.Handle(http.MethodPatch, pattern, hs...)
 }
 
 // Delete registers the handler for the given pattern and method DELETE.
 func (a *Router) Delete(pattern string, hs ...func(*Context) error) *Router {
-	return a.Handle("DELETE", pattern, hs...)
+	return a.Handle(http.MethodDelete, pattern, hs...)
 }
 
 // Router finds the router by pattern.
@@ -85,22 +68,25 @@ func (a *Router) Router(pattern string) *Router {
 		key = pattern[:i]
 	}
 
-	r, ok := a.children[key]
+	router, ok := a.children[key]
 	if !ok {
-		r = New()
+		router = &Router{
+			children: make(map[string]*Router),
+			handlers: make(map[string][]func(*Context) error),
+		}
 		if len(key) > 0 && key[0] == ':' {
 			if a.key != "" {
 				panic("ws: conflict between parameters " + a.key + " and " + key)
 			}
 			a.key = key
 		}
-		a.children[key] = r
+		a.children[key] = router
 	}
 
 	if i < 0 {
-		return r
+		return router
 	}
-	return r.Router(pattern[i:])
+	return router.Router(pattern[i:])
 }
 
 // Match matches the path.
@@ -125,11 +111,13 @@ func (a *Router) Match(path string) (*Router, string, string) {
 
 // ServeHTTP dispatches the request to the handler whose pattern matches the request URL.
 func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	defer func() {
-		if e := recover(); e != nil {
-			log.Println("ws:", e)
-			w.WriteHeader(http.StatusInternalServerError)
+		if x := recover(); x != nil {
+			err = fmt.Errorf("ws: %v", x)
+			log.Println("ws:", err)
 		}
+		finally(w, err)
 	}()
 
 	path := r.URL.Path
@@ -137,7 +125,7 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		path = "/" + path
 	}
 
-	err := (&Context{
+	err = (&Context{
 		Request:        r,
 		ResponseWriter: w,
 		Path:           path,
@@ -147,12 +135,4 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		router: a,
 		index:  -len(a.middlewares),
 	}).Next()
-
-	if err != nil {
-		if e, ok := err.(*StatusError); ok {
-			w.WriteHeader(e.code)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-	}
 }

@@ -19,6 +19,7 @@ type Context struct {
 	ResponseWriter http.ResponseWriter
 	Path           string
 
+	code   int
 	datas  map[string]interface{}
 	params map[string]string
 	querys url.Values
@@ -85,6 +86,11 @@ func (a *Context) Next() error {
 	}).Next()
 }
 
+// Status sets the status code.
+func (a *Context) Status(code int) {
+	a.code = code
+}
+
 // Get gets the context data.
 func (a *Context) Get(key string) interface{} {
 	return a.datas[key]
@@ -115,7 +121,11 @@ func (a *Context) FormValue(key string) string {
 
 // FormFile returns the first file for the provided form key.
 func (a *Context) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
-	return a.Request.FormFile(key)
+	f, fh, err := a.Request.FormFile(key)
+	if err != nil {
+		err = Status(http.StatusBadRequest, err)
+	}
+	return f, fh, err
 }
 
 // ParseJSON parse the JSON data.
@@ -137,33 +147,33 @@ func (a *Context) ParseXML(value interface{}) error {
 }
 
 // Text responses the text content.
-func (a *Context) Text(code int, value string) error {
-	a.ResponseWriter.Header().Set("Content-Type", "text/plain; charset=UTF-8")
-	a.ResponseWriter.WriteHeader(a.statusCode(code))
+func (a *Context) Text(value string) error {
+	a.ResponseWriter.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	a.ResponseWriter.WriteHeader(a.statusCode())
 	a.ResponseWriter.Write([]byte(value))
 	return nil
 }
 
 // JSON responses the JSON content.
-func (a *Context) JSON(code int, value interface{}) error {
+func (a *Context) JSON(value interface{}) error {
 	b, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	a.ResponseWriter.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	a.ResponseWriter.WriteHeader(a.statusCode(code))
+	a.ResponseWriter.Header().Set("Content-Type", "application/json; charset=utf-8")
+	a.ResponseWriter.WriteHeader(a.statusCode())
 	a.ResponseWriter.Write(b)
 	return nil
 }
 
 // XML responses the XML content.
-func (a *Context) XML(code int, value interface{}) error {
+func (a *Context) XML(value interface{}) error {
 	b, err := xml.Marshal(value)
 	if err != nil {
 		return err
 	}
-	a.ResponseWriter.Header().Set("Content-Type", "application/xml; charset=UTF-8")
-	a.ResponseWriter.WriteHeader(a.statusCode(code))
+	a.ResponseWriter.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	a.ResponseWriter.WriteHeader(a.statusCode())
 	a.ResponseWriter.Write(b)
 	return nil
 }
@@ -179,7 +189,10 @@ func (a *Context) File(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			err = Status(http.StatusNotFound, err)
+			return Status(http.StatusNotFound, err)
+		}
+		if os.IsPermission(err) {
+			return Status(http.StatusForbidden, err)
 		}
 		return err
 	}
@@ -205,14 +218,14 @@ func (a *Context) RealIP() string {
 	return ra
 }
 
-func (a *Context) statusCode(code int) int {
-	if code > 0 {
-		return code
+func (a *Context) statusCode() int {
+	if a.code > 0 {
+		return a.code
 	}
 	switch a.Request.Method {
-	case "POST":
+	case http.MethodPost:
 		return http.StatusCreated
-	case "DELETE":
+	case http.MethodDelete:
 		return http.StatusNoContent
 	default:
 		return http.StatusOK

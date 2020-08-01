@@ -1,3 +1,4 @@
+// Package ws provides HTTP server implementations.
 package ws
 
 import (
@@ -14,13 +15,14 @@ type StatusError struct {
 
 // Status creates a new http status error.
 func Status(code int, msg interface{}) *StatusError {
-	tfmt := "unknown error: %v"
-	if text := strings.ToLower(http.StatusText(code)); text != "" {
-		tfmt = text + ": %v"
+	tfmt := http.StatusText(code)
+	if tfmt == "" {
+		code = http.StatusTeapot
+		tfmt = http.StatusText(code)
 	}
 	return &StatusError{
 		code: code,
-		text: fmt.Sprintf(tfmt, msg),
+		text: fmt.Sprintf(strings.ToLower(tfmt)+": %v", msg),
 	}
 }
 
@@ -32,4 +34,15 @@ func (a *StatusError) Code() int {
 // Error returns the error string.
 func (a *StatusError) Error() string {
 	return "ws: " + a.text
+}
+
+func finally(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+	code := http.StatusInternalServerError
+	if e, ok := err.(*StatusError); ok {
+		code = e.code
+	}
+	http.Error(w, http.StatusText(code), code)
 }
