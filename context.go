@@ -123,7 +123,7 @@ func (a *Context) FormValue(key string) string {
 func (a *Context) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
 	f, fh, err := a.Request.FormFile(key)
 	if err != nil {
-		err = Status(http.StatusBadRequest, err)
+		err = Status(http.StatusBadRequest, err.Error())
 	}
 	return f, fh, err
 }
@@ -132,7 +132,7 @@ func (a *Context) FormFile(key string) (multipart.File, *multipart.FileHeader, e
 func (a *Context) ParseJSON(value interface{}) error {
 	err := json.NewDecoder(a.Request.Body).Decode(value)
 	if err != nil {
-		err = Status(http.StatusBadRequest, err)
+		err = Status(http.StatusBadRequest, err.Error())
 	}
 	return err
 }
@@ -141,7 +141,7 @@ func (a *Context) ParseJSON(value interface{}) error {
 func (a *Context) ParseXML(value interface{}) error {
 	err := xml.NewDecoder(a.Request.Body).Decode(value)
 	if err != nil {
-		err = Status(http.StatusBadRequest, err)
+		err = Status(http.StatusBadRequest, err.Error())
 	}
 	return err
 }
@@ -189,10 +189,10 @@ func (a *Context) File(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Status(http.StatusNotFound, err)
+			return Status(http.StatusNotFound, err.Error())
 		}
 		if os.IsPermission(err) {
-			return Status(http.StatusForbidden, err)
+			return Status(http.StatusForbidden, err.Error())
 		}
 		return err
 	}

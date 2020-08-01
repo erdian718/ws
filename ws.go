@@ -2,9 +2,8 @@
 package ws
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
+	"strconv"
 )
 
 // StatusError is the http status error.
@@ -14,15 +13,10 @@ type StatusError struct {
 }
 
 // Status creates a new http status error.
-func Status(code int, msg interface{}) *StatusError {
-	tfmt := http.StatusText(code)
-	if tfmt == "" {
-		code = http.StatusTeapot
-		tfmt = http.StatusText(code)
-	}
+func Status(code int, text string) *StatusError {
 	return &StatusError{
 		code: code,
-		text: fmt.Sprintf(strings.ToLower(tfmt)+": %v", msg),
+		text: text,
 	}
 }
 
@@ -33,7 +27,7 @@ func (a *StatusError) Code() int {
 
 // Error returns the error string.
 func (a *StatusError) Error() string {
-	return "ws: " + a.text
+	return "ws: " + strconv.Itoa(a.code) + " " + a.text
 }
 
 func finally(w http.ResponseWriter, err error) {
@@ -44,5 +38,10 @@ func finally(w http.ResponseWriter, err error) {
 	if e, ok := err.(*StatusError); ok {
 		code = e.code
 	}
-	http.Error(w, http.StatusText(code), code)
+	text := http.StatusText(code)
+	if text == "" {
+		code = http.StatusTeapot
+		text = http.StatusText(code)
+	}
+	http.Error(w, text, code)
 }

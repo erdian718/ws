@@ -89,7 +89,7 @@ func (a *Manager) Check(c *ws.Context) error {
 		}
 	}
 	a.Delete(c)
-	return ws.Status(http.StatusUnauthorized, nil)
+	return ws.Status(http.StatusUnauthorized, "")
 }
 
 func (a *Manager) encode(age int32, value []byte) string {
