@@ -2,6 +2,7 @@
 package ws
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -49,6 +50,10 @@ func finally(w http.ResponseWriter, err error) {
 	if e, ok := err.(*StatusError); ok {
 		code = e.code
 	}
+	if code >= http.StatusInternalServerError {
+		log.Println(err)
+	}
+
 	text := http.StatusText(code)
 	if text == "" {
 		code = http.StatusTeapot
