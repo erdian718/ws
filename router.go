@@ -23,7 +23,7 @@ func (a *Router) Use(hs ...func(*Context) error) *Router {
 
 // Handle registers the handler for the given pattern and method.
 func (a *Router) Handle(method string, pattern string, hs ...func(*Context) error) *Router {
-	r := a.Router(pattern)
+	r := a.Route(pattern)
 	r.handlers[method] = append(r.handlers[method], hs...)
 	return a
 }
@@ -53,8 +53,8 @@ func (a *Router) Delete(pattern string, hs ...func(*Context) error) *Router {
 	return a.Handle(http.MethodDelete, pattern, hs...)
 }
 
-// Router finds the router by pattern.
-func (a *Router) Router(pattern string) *Router {
+// Route finds the router by pattern.
+func (a *Router) Route(pattern string) *Router {
 	if len(pattern) < 1 || pattern[0] != '/' {
 		panic("ws: invalid router patttern: " + pattern)
 	}
@@ -86,7 +86,7 @@ func (a *Router) Router(pattern string) *Router {
 	if i < 0 {
 		return router
 	}
-	return router.Router(pattern[i:])
+	return router.Route(pattern[i:])
 }
 
 // Match matches the path.

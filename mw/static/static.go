@@ -8,27 +8,37 @@ import (
 	"github.com/ofunc/ws"
 )
 
+var allow = strings.Join([]string{http.MethodOptions, http.MethodGet, http.MethodHead}, ", ")
+
 // New creates a static file middleware.
 func New(root string) func(*ws.Context) error {
 	return func(ctx *ws.Context) error {
-		if strings.Contains(ctx.Path, "..") {
-			return ws.Status(http.StatusBadRequest, "invalid path: "+ctx.Path)
-		}
-
-		for i := len(ctx.Path) - 1; i >= 0 && ctx.Path[i] != '/'; i-- {
-			if ctx.Path[i] == '.' {
-				return ctx.File(filepath.Join(root, filepath.FromSlash(ctx.Path)))
-			}
-		}
-
 		err := ctx.Next()
-		if err != nil {
-			if e, ok := err.(*ws.StatusError); ok {
-				if e.Code() == http.StatusNotFound {
-					return ctx.File(filepath.Join(root, filepath.FromSlash(ctx.Path), "index.html"))
-				}
-			}
+		if err == nil {
+			return err
 		}
-		return err
+		serr, ok := err.(*ws.StatusError)
+		if !ok {
+			return err
+		}
+		if serr.Code() != http.StatusNotFound {
+			return err
+		}
+
+		method := ctx.Request.Method
+		if method == http.MethodOptions {
+			header := ctx.ResponseWriter.Header()
+			header.Add("Allow", allow)
+			ctx.ResponseWriter.WriteHeader(http.StatusOK)
+			ctx.ResponseWriter.Write([]byte(""))
+			return nil
+		}
+		if method != http.MethodGet && method != http.MethodHead {
+			return ws.Status(http.StatusMethodNotAllowed, method+" "+ctx.Request.URL.Path)
+		}
+		if strings.Contains(ctx.Path, "..") {
+			return ws.Status(http.StatusBadRequest, "invalid path: "+ctx.Request.URL.Path)
+		}
+		return ctx.File(filepath.Join(root, filepath.FromSlash(ctx.Path)))
 	}
 }

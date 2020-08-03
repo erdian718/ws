@@ -68,12 +68,12 @@ func (a *Server) MaxHeaderBytes(n int) *Server {
 }
 
 // Run runs the server at addr.
-func (a *Server) Run(addr string) error {
+func (a *Server) Run() error {
 	return a.server.ListenAndServe()
 }
 
 // RunTLS runs the server at addr.
-func (a *Server) RunTLS(addr string, certfile, keyfile string) error {
+func (a *Server) RunTLS(certfile, keyfile string) error {
 	return a.server.ListenAndServeTLS(certfile, keyfile)
 }
 
