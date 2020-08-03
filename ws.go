@@ -38,7 +38,7 @@ func (a *StatusError) Code() int {
 
 // Error returns the error string.
 func (a *StatusError) Error() string {
-	return "ws: " + strconv.Itoa(a.code) + " " + a.text
+	return "ws: status(" + strconv.Itoa(a.code) + ") " + a.text
 }
 
 func finally(w http.ResponseWriter, err error) {

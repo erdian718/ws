@@ -10,39 +10,54 @@ import (
 	"github.com/ofunc/ws"
 )
 
+const k = 0.01
+
 type info struct {
 	dur  float64
 	time time.Time
 }
 
 // New creates a limiter middleware.
-func New(size int64, freq int, timeout time.Duration) func(*ws.Context) error {
-	var mdur float64
-	var minfo map[string]info
+func New(size int64, mdur float64, timeout time.Duration) func(*ws.Context) error {
+	var stime time.Time
+	var sdur time.Duration
+	var hinfo map[string]info
+	var cinfo map[string]info
 	var mutex sync.Mutex
-	if freq > 0 {
-		mdur = 1 / float64(freq)
-		minfo = make(map[string]info)
+	if mdur > 0 {
+		sdur = time.Duration(1e9 * mdur * 8 / k)
+		stime = time.Now().Add(sdur)
+		hinfo = make(map[string]info)
 	}
 
 	return func(ctx *ws.Context) error {
 		if size > 0 {
 			ctx.Request.Body = http.MaxBytesReader(ctx.ResponseWriter, ctx.Request.Body, size)
 		}
-		if freq > 0 {
-			now, key, dur := time.Now(), ctx.RealIP(), 2*mdur
+		if mdur > 0 {
+			now, key, dur := time.Now(), ctx.RealIP(), 1.2*mdur
 			mutex.Lock()
-			if info, ok := minfo[key]; ok {
-				dur = 0.01*now.Sub(info.time).Seconds() + 0.99*info.dur
+			x, ok := hinfo[key]
+			if !ok {
+				x, ok = cinfo[key]
 			}
-			minfo[key] = info{
+			if ok {
+				dur = k*now.Sub(x.time).Seconds() + (1-k)*x.dur
+			}
+
+			if now.After(stime) {
+				stime, hinfo, cinfo = now.Add(sdur), make(map[string]info), hinfo
+			}
+			hinfo[key] = info{
 				dur:  dur,
 				time: now,
 			}
 			mutex.Unlock()
 			if dur < mdur {
 				err := ws.Status(http.StatusTooManyRequests, key)
-				log.Println(err)
+				if x.dur >= mdur {
+					log.Println(err)
+				}
 				return err
 			}
 		}
