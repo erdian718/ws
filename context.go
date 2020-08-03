@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -191,7 +192,7 @@ func (a *Context) Content(name string, modtime time.Time, content io.ReadSeeker)
 
 // File responses the file content.
 func (a *Context) File(path string) error {
-	f, err := os.Open(path)
+	stat, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Status(http.StatusNotFound, err.Error())
@@ -201,9 +202,17 @@ func (a *Context) File(path string) error {
 		}
 		return err
 	}
+	if stat.IsDir() {
+		path = filepath.Join(path, "index.html")
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
 	defer f.Close()
 
-	stat, err := f.Stat()
+	stat, err = f.Stat()
 	if err != nil {
 		return err
 	}
