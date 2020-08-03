@@ -47,6 +47,19 @@ func (a *Context) Next() error {
 
 	if a.Path == "" {
 		method := a.Request.Method
+		if method == http.MethodOptions {
+			allow := []string{http.MethodOptions}
+			for m := range a.router.handlers {
+				allow = append(allow, m)
+				if m == http.MethodGet {
+					allow = append(allow, http.MethodHead)
+				}
+			}
+			a.ResponseWriter.Header().Add("Allow", strings.Join(allow, ", "))
+			a.ResponseWriter.WriteHeader(http.StatusOK)
+			a.ResponseWriter.Write([]byte(""))
+			return nil
+		}
 		if method == http.MethodHead {
 			method = http.MethodGet
 		}

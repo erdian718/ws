@@ -4,7 +4,18 @@ package ws
 import (
 	"net/http"
 	"strconv"
+	"strings"
 )
+
+var allAllow = strings.Join([]string{
+	http.MethodOptions,
+	http.MethodGet,
+	http.MethodHead,
+	http.MethodPost,
+	http.MethodPut,
+	http.MethodPatch,
+	http.MethodDelete,
+}, ", ")
 
 // StatusError is the http status error.
 type StatusError struct {

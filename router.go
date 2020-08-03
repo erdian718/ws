@@ -124,7 +124,12 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(path) < 1 || path[0] != '/' {
 		path = "/" + path
 	}
-
+	if r.Method == http.MethodOptions && path == "/*" {
+		w.Header().Add("Allow", allAllow)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(""))
+		return
+	}
 	err = (&Context{
 		Request:        r,
 		ResponseWriter: w,

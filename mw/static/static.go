@@ -27,8 +27,7 @@ func New(root string) func(*ws.Context) error {
 
 		method := ctx.Request.Method
 		if method == http.MethodOptions {
-			header := ctx.ResponseWriter.Header()
-			header.Add("Allow", allow)
+			ctx.ResponseWriter.Header().Add("Allow", allow)
 			ctx.ResponseWriter.WriteHeader(http.StatusOK)
 			ctx.ResponseWriter.Write([]byte(""))
 			return nil
