@@ -46,6 +46,7 @@ func finally(w http.ResponseWriter, err error) {
 	if err == nil {
 		return
 	}
+
 	code := http.StatusInternalServerError
 	if e, ok := err.(*StatusError); ok {
 		code = e.code
