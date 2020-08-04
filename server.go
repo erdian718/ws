@@ -2,7 +2,10 @@ package ws
 
 import (
 	"context"
+	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"time"
 )
 
@@ -10,6 +13,7 @@ import (
 type Server struct {
 	*Router
 	server *http.Server
+	closed chan struct{}
 }
 
 // New creates a new server.
@@ -67,17 +71,39 @@ func (a *Server) MaxHeaderBytes(n int) *Server {
 	return a
 }
 
-// Run runs the server at addr.
-func (a *Server) Run() error {
-	return a.server.ListenAndServe()
+// Start starts the server at addr.
+func (a *Server) Start() error {
+	go a.start()
+	err := a.server.ListenAndServe()
+	<-a.closed
+	return err
 }
 
-// RunTLS runs the server at addr.
-func (a *Server) RunTLS(certfile, keyfile string) error {
-	return a.server.ListenAndServeTLS(certfile, keyfile)
+// StartTLS starts the server at addr.
+func (a *Server) StartTLS(certfile, keyfile string) error {
+	go a.start()
+	err := a.server.ListenAndServeTLS(certfile, keyfile)
+	<-a.closed
+	return err
 }
 
-// Shutdown gracefully shuts down the app.
+// Shutdown gracefully shuts down the server.
 func (a *Server) Shutdown(ctx context.Context) error {
+	log.Println("ws: shutdown server")
 	return a.server.Shutdown(ctx)
+}
+
+func (a *Server) start() {
+	log.Println("ws: start server at", a.server.Addr)
+
+	a.closed = make(chan struct{})
+	defer close(a.closed)
+
+	sigint := make(chan os.Signal)
+	signal.Notify(sigint, os.Interrupt)
+	<-sigint
+
+	if err := a.Shutdown(context.Background()); err != nil {
+		log.Println("ws:", err)
+	}
 }

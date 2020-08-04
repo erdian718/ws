@@ -1,7 +1,6 @@
 package limiter
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -21,7 +20,7 @@ type info struct {
 }
 
 // New creates a limiter middleware.
-func New(size int64, duration time.Duration, timeout time.Duration) func(*ws.Context) error {
+func New(size int64, duration time.Duration) func(*ws.Context) error {
 	var mdur float64
 	var stime time.Time
 	var sdur time.Duration
@@ -70,26 +69,6 @@ func New(size int64, duration time.Duration, timeout time.Duration) func(*ws.Con
 				return err
 			}
 		}
-		if timeout <= 0 {
-			return ctx.Next()
-		}
-
-		ch := make(chan error)
-		go func() {
-			defer func() {
-				if x := recover(); x != nil {
-					ch <- fmt.Errorf("ws: %v", x)
-				}
-				close(ch)
-			}()
-			ch <- ctx.Next()
-		}()
-
-		select {
-		case err := <-ch:
-			return err
-		case <-time.After(timeout):
-			return ws.Status(http.StatusRequestTimeout, ctx.RealIP())
-		}
+		return ctx.Next()
 	}
 }
