@@ -66,7 +66,7 @@ func (a *Context) Next() error {
 
 		hs, ok := a.router.handlers[method]
 		if !ok {
-			return Status(http.StatusMethodNotAllowed, method+" "+a.Request.URL.Path)
+			return Status(http.StatusMethodNotAllowed, a.Request.Method+" "+a.Request.URL.Path)
 		}
 		if a.index >= len(hs) {
 			return nil
