@@ -10,7 +10,10 @@ import (
 	"github.com/ofunc/ws"
 )
 
-const k = 0.01
+const (
+	k = 0.010
+	m = 1.200
+)
 
 type info struct {
 	dur  float64
@@ -18,14 +21,20 @@ type info struct {
 }
 
 // New creates a limiter middleware.
-func New(size int64, mdur float64, timeout time.Duration) func(*ws.Context) error {
+func New(size int64, duration time.Duration, timeout time.Duration) func(*ws.Context) error {
+	var mdur float64
 	var stime time.Time
 	var sdur time.Duration
 	var hinfo map[string]info
 	var cinfo map[string]info
 	var mutex sync.Mutex
-	if mdur > 0 {
-		sdur = time.Duration(1e9 * mdur * 8 / k)
+
+	if duration > 0 {
+		mdur = duration.Seconds()
+		sdur = time.Duration(1e9 * mdur * (m + k - 1) / k)
+		if sdur < 10*time.Minute {
+			sdur = 10 * time.Minute
+		}
 		stime = time.Now().Add(sdur)
 		hinfo = make(map[string]info)
 	}
@@ -34,8 +43,8 @@ func New(size int64, mdur float64, timeout time.Duration) func(*ws.Context) erro
 		if size > 0 {
 			ctx.Request.Body = http.MaxBytesReader(ctx.ResponseWriter, ctx.Request.Body, size)
 		}
-		if mdur > 0 {
-			now, key, dur := time.Now(), ctx.RealIP(), 1.2*mdur
+		if duration > 0 {
+			now, key, dur := time.Now(), ctx.RealIP(), m*mdur
 			mutex.Lock()
 			x, ok := hinfo[key]
 			if !ok {
