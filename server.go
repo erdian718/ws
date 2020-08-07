@@ -94,7 +94,11 @@ func (a *Server) Shutdown(ctx context.Context) error {
 }
 
 func (a *Server) start() {
-	log.Println("ws: start server at", a.server.Addr)
+	addr := a.server.Addr
+	if addr == "" {
+		addr = "default addr"
+	}
+	log.Println("ws: start server at", addr)
 
 	a.closed = make(chan struct{})
 	defer close(a.closed)
