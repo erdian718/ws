@@ -56,9 +56,7 @@ func (a *Context) Next() error {
 				}
 			}
 			a.ResponseWriter.Header().Add("Allow", strings.Join(allow, ", "))
-			a.ResponseWriter.WriteHeader(http.StatusOK)
-			a.ResponseWriter.Write([]byte(""))
-			return nil
+			return Status(http.StatusOK, "")
 		}
 		if method == http.MethodHead {
 			method = http.MethodGet

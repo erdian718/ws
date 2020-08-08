@@ -28,9 +28,7 @@ func New(root string) func(*ws.Context) error {
 		method := ctx.Request.Method
 		if method == http.MethodOptions {
 			ctx.ResponseWriter.Header().Add("Allow", allow)
-			ctx.ResponseWriter.WriteHeader(http.StatusOK)
-			ctx.ResponseWriter.Write([]byte(""))
-			return nil
+			return ws.Status(http.StatusOK, "")
 		}
 		if method != http.MethodGet && method != http.MethodHead {
 			return ws.Status(http.StatusMethodNotAllowed, method+" "+ctx.Request.URL.Path)
