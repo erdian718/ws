@@ -25,19 +25,16 @@ func New(cs ...*Control) func(*ws.Context) error {
 		csm[c.Origin] = c
 	}
 	return func(ctx *ws.Context) error {
-		method := ctx.Request.Method
-		path := ctx.Request.URL.Path
-		reqheader := ctx.Request.Header
-		resheader := ctx.ResponseWriter.Header()
-
-		origin := reqheader.Get("Origin")
+		origin := ctx.Request.Header.Get("Origin")
 		if origin == "" {
 			return ctx.Next()
 		}
 
+		method := ctx.Request.Method
+		var err error = ws.Status(http.StatusForbidden, method+" "+ctx.Request.URL.Path+" from "+origin)
 		c, ok := csm[origin]
 		if !ok {
-			return ws.Status(http.StatusForbidden, method+" "+path+" from "+origin)
+			return err
 		}
 		ok = false
 		if method != http.MethodOptions {
@@ -49,29 +46,30 @@ func New(cs ...*Control) func(*ws.Context) error {
 			}
 		}
 		if !ok {
-			return ws.Status(http.StatusForbidden, method+" "+path+" from "+origin)
+			return err
 		}
 
-		resheader.Set("Access-Control-Allow-Origin", c.Origin)
+		header := ctx.ResponseWriter.Header()
+		header.Set("Access-Control-Allow-Origin", c.Origin)
 		if len(c.ExposeHeaders) > 0 {
-			resheader.Set("Access-Control-Expose-Headers", strings.Join(c.ExposeHeaders, ", "))
+			header.Set("Access-Control-Expose-Headers", strings.Join(c.ExposeHeaders, ", "))
 		}
 
-		err := ctx.Next()
+		err = ctx.Next()
 		if method == http.MethodOptions {
 			if c.AllowCredentials {
-				resheader.Set("Access-Control-Allow-Credentials", "true")
+				header.Set("Access-Control-Allow-Credentials", "true")
 			}
 			if len(c.AllowHeaders) > 0 {
-				resheader.Set("Access-Control-Allow-Headers", strings.Join(c.AllowHeaders, ", "))
+				header.Set("Access-Control-Allow-Headers", strings.Join(c.AllowHeaders, ", "))
 			}
 			if len(c.AllowMethods) > 0 {
-				resheader.Set("Access-Control-Allow-Methods", strings.Join(c.AllowMethods, ", "))
+				header.Set("Access-Control-Allow-Methods", strings.Join(c.AllowMethods, ", "))
 			} else {
-				resheader.Set("Access-Control-Allow-Methods", resheader.Get("Allow"))
+				header.Set("Access-Control-Allow-Methods", header.Get("Allow"))
 			}
 			if c.MaxAge > 0 {
-				resheader.Set("Access-Control-Max-Age", strconv.Itoa(c.MaxAge))
+				header.Set("Access-Control-Max-Age", strconv.Itoa(c.MaxAge))
 			}
 		}
 		return err
