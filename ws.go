@@ -4,6 +4,7 @@ package ws
 import (
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -50,11 +51,15 @@ func finally(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	if e, ok := err.(*StatusError); ok {
 		code = e.code
+	} else if os.IsNotExist(err) {
+		code = http.StatusNotFound
+	} else if os.IsPermission(err) {
+		code = http.StatusForbidden
 	}
+
 	if code >= http.StatusInternalServerError {
 		log.Println(err)
 	}
-
 	text := http.StatusText(code)
 	if text == "" {
 		code = http.StatusTeapot
