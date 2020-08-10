@@ -18,11 +18,6 @@ var (
 	encoding = base64.RawURLEncoding
 )
 
-type info struct {
-	stamp int64
-	age   int32
-}
-
 // Manager is the token manager.
 type Manager struct {
 	name   string
