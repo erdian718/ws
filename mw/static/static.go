@@ -59,7 +59,6 @@ func New(root string, age int, exts ...string) func(*ws.Context) error {
 	}
 }
 
-// Accept-Encoding
 func realpath(header http.Header, mgzip map[string]bool, root, path string) (string, bool, error) {
 	path = filepath.FromSlash(path)
 	fpath := filepath.Join(root, path)

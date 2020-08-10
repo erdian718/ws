@@ -3,8 +3,8 @@ package token
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"hash"
 	"net/http"
 	"sync"
@@ -13,7 +13,12 @@ import (
 	"github.com/ofunc/ws"
 )
 
-type itoken struct {
+var (
+	endian   = binary.LittleEndian
+	encoding = base64.RawURLEncoding
+)
+
+type info struct {
 	stamp int64
 	age   int32
 }
@@ -21,30 +26,18 @@ type itoken struct {
 // Manager is the token manager.
 type Manager struct {
 	name   string
-	key    []byte
 	path   string
 	secure bool
-	pool   sync.Pool
-}
-
-// Stamp gets the stamp.
-func Stamp(b []byte) int64 {
-	return int64(binary.LittleEndian.Uint64(b[:8]))
-}
-
-// Value gets the value.
-func Value(b []byte) []byte {
-	return b[44:]
+	pool   *sync.Pool
 }
 
 // New creates a new manager.
 func New(name string, key []byte, path string, secure bool) *Manager {
 	return &Manager{
 		name:   name,
-		key:    key,
 		path:   path,
 		secure: secure,
-		pool: sync.Pool{
+		pool: &sync.Pool{
 			New: func() interface{} {
 				return hmac.New(sha256.New, key)
 			},
@@ -57,7 +50,7 @@ func (a *Manager) New(c *ws.Context, age int32, value []byte) {
 	http.SetCookie(c.ResponseWriter, &http.Cookie{
 		Name:     a.name,
 		Value:    a.encode(age, value),
-		MaxAge:   2 * int(age),
+		MaxAge:   int(age),
 		Path:     a.path,
 		Secure:   a.secure,
 		HttpOnly: true,
@@ -78,13 +71,13 @@ func (a *Manager) Delete(c *ws.Context) {
 }
 
 // Check checks if the token is valid.
-func (a *Manager) Check(c *ws.Context) error {
+func (a *Manager) Check(c *ws.Context, auto bool) error {
 	if cookie, err := c.Request.Cookie(a.name); err == nil {
-		if ok, age, buf := a.decode(cookie.Value); ok {
-			if age > 0 {
-				a.New(c, age, buf[44:])
+		if ok, upt, age, value := a.decode(cookie.Value); ok {
+			if auto && upt {
+				a.New(c, age, value)
 			}
-			c.Set(a.name, buf)
+			c.Set(a.name, value)
 			return c.Next()
 		}
 	}
@@ -93,27 +86,25 @@ func (a *Manager) Check(c *ws.Context) error {
 }
 
 func (a *Manager) encode(age int32, value []byte) string {
-	buf := make([]byte, 12)
-	binary.LittleEndian.PutUint64(buf[:8], uint64(time.Now().Unix()))
-	binary.LittleEndian.PutUint32(buf[8:], uint32(age))
+	buf := make([]byte, 44+len(value))
+	endian.PutUint64(buf[:8], uint64(time.Now().Unix()))
+	endian.PutUint32(buf[8:], uint32(age))
 
 	h := a.pool.Get().(hash.Hash)
 	defer a.pool.Put(h)
 	h.Reset()
 
-	h.Write(buf)
+	h.Write(buf[:12])
 	h.Write(value)
-	head := h.Sum(buf)
-	return hex.EncodeToString(head) + hex.EncodeToString(value)
+	copy(buf[12:], h.Sum(nil))
+	copy(buf[44:], value)
+	return encoding.EncodeToString(buf)
 }
 
-func (a *Manager) decode(s string) (bool, int32, []byte) {
-	buf, err := hex.DecodeString(s)
-	if err != nil {
-		return false, 0, nil
-	}
-	if len(buf) < 44 {
-		return false, 0, nil
+func (a *Manager) decode(s string) (bool, bool, int32, []byte) {
+	buf, err := encoding.DecodeString(s)
+	if err != nil || len(buf) < 44 {
+		return false, false, 0, nil
 	}
 
 	h := a.pool.Get().(hash.Hash)
@@ -123,17 +114,11 @@ func (a *Manager) decode(s string) (bool, int32, []byte) {
 	h.Write(buf[:12])
 	h.Write(buf[44:])
 	if !hmac.Equal(h.Sum(nil), buf[12:44]) {
-		return false, 0, nil
+		return false, false, 0, nil
 	}
 
-	stamp := int64(binary.LittleEndian.Uint64(buf[:8]))
-	age := int64(binary.LittleEndian.Uint32(buf[8:12]))
+	stamp := int64(endian.Uint64(buf[:8]))
+	age := int64(endian.Uint32(buf[8:12]))
 	dur := time.Now().Unix() - stamp
-	if dur > 2*age {
-		return false, 0, nil
-	}
-	if dur > age {
-		return true, int32(age), buf
-	}
-	return true, 0, buf
+	return dur <= age, dur > age/2, int32(age), buf[44:]
 }
