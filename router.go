@@ -2,7 +2,6 @@ package ws
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -115,7 +114,6 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if x := recover(); x != nil {
 			err = fmt.Errorf("ws: %v", x)
-			log.Println("ws:", err)
 		}
 		finally(w, err)
 	}()
@@ -126,8 +124,7 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodOptions && path == "/*" {
 		w.Header().Add("Allow", allAllow)
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(""))
+		err = Status(http.StatusOK, "")
 		return
 	}
 	err = (&Context{

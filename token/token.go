@@ -26,8 +26,8 @@ type Manager struct {
 	pool   *sync.Pool
 }
 
-// New creates a new manager.
-func New(name string, key []byte, path string, secure bool) *Manager {
+// New creates a new token manager.
+func New(name string, path string, secure bool, key []byte) *Manager {
 	return &Manager{
 		name:   name,
 		path:   path,
@@ -41,8 +41,8 @@ func New(name string, key []byte, path string, secure bool) *Manager {
 }
 
 // New creates a new token.
-func (a *Manager) New(c *ws.Context, age int32, value []byte) {
-	http.SetCookie(c.ResponseWriter, &http.Cookie{
+func (a *Manager) New(ctx *ws.Context, age int32, value []byte) {
+	http.SetCookie(ctx.ResponseWriter, &http.Cookie{
 		Name:     a.name,
 		Value:    a.encode(age, value),
 		MaxAge:   int(age),
@@ -54,8 +54,8 @@ func (a *Manager) New(c *ws.Context, age int32, value []byte) {
 }
 
 // Delete deletes the token.
-func (a *Manager) Delete(c *ws.Context) {
-	http.SetCookie(c.ResponseWriter, &http.Cookie{
+func (a *Manager) Delete(ctx *ws.Context) {
+	http.SetCookie(ctx.ResponseWriter, &http.Cookie{
 		Name:     a.name,
 		MaxAge:   -1,
 		Path:     a.path,
@@ -65,19 +65,21 @@ func (a *Manager) Delete(c *ws.Context) {
 	})
 }
 
-// Check checks if the token is valid.
-func (a *Manager) Check(c *ws.Context, auto bool) error {
-	if cookie, err := c.Request.Cookie(a.name); err == nil {
-		if ok, upt, age, value := a.decode(cookie.Value); ok {
-			if auto && upt {
-				a.New(c, age, value)
+// Checker returns the token checker.
+func (a *Manager) Checker(renew bool) func(*ws.Context) error {
+	return func(ctx *ws.Context) error {
+		if cookie, err := ctx.Request.Cookie(a.name); err == nil {
+			if ok, upt, age, value := a.decode(cookie.Value); ok {
+				if renew && upt {
+					a.New(ctx, age, value)
+				}
+				ctx.Set(a.name, value)
+				return ctx.Next()
 			}
-			c.Set(a.name, value)
-			return c.Next()
 		}
+		a.Delete(ctx)
+		return ws.Status(http.StatusUnauthorized, "")
 	}
-	a.Delete(c)
-	return ws.Status(http.StatusUnauthorized, "")
 }
 
 func (a *Manager) encode(age int32, value []byte) string {

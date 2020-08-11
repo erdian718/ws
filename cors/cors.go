@@ -20,7 +20,7 @@ type Control struct {
 
 // New creates a cors middleware.
 func New(cs ...*Control) func(*ws.Context) error {
-	csm := make(map[string]*Control)
+	csm := make(map[string]*Control, len(cs))
 	for _, c := range cs {
 		csm[c.Origin] = c
 	}
