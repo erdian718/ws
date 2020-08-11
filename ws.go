@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var allAllow = strings.Join([]string{
@@ -18,6 +19,12 @@ var allAllow = strings.Join([]string{
 	http.MethodPatch,
 	http.MethodDelete,
 }, ", ")
+
+var ctxPool = &sync.Pool{
+	New: func() interface{} {
+		return new(Context)
+	},
+}
 
 // StatusError is the http status error.
 type StatusError struct {

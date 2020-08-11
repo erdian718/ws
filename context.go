@@ -29,19 +29,21 @@ type Context struct {
 
 // Next calls the next handler.
 func (a *Context) Next() error {
+	ctx := ctxPool.Get().(*Context)
+	defer ctxPool.Put(ctx)
+	ctx.Request = a.Request
+	ctx.ResponseWriter = a.ResponseWriter
+	ctx.Path = a.Path
+	ctx.code = 0
+	ctx.datas = a.datas
+	ctx.params = a.params
+	ctx.querys = a.querys
+	ctx.router = a.router
+	ctx.index = a.index + 1
+
 	if a.index < 0 {
 		ms := a.router.middlewares
-		return ms[a.index+len(ms)](&Context{
-			Request:        a.Request,
-			ResponseWriter: a.ResponseWriter,
-			Path:           a.Path,
-
-			datas:  a.datas,
-			params: a.params,
-			querys: a.querys,
-			router: a.router,
-			index:  a.index + 1,
-		})
+		return ms[a.index+len(ms)](ctx)
 	}
 
 	if a.Path == "" {
@@ -65,20 +67,10 @@ func (a *Context) Next() error {
 		if !ok {
 			return Status(http.StatusMethodNotAllowed, a.Request.Method+" "+a.Request.URL.Path)
 		}
-		if a.index >= len(hs) {
-			return nil
+		if a.index < len(hs) {
+			return hs[a.index](ctx)
 		}
-		return hs[a.index](&Context{
-			Request:        a.Request,
-			ResponseWriter: a.ResponseWriter,
-			Path:           a.Path,
-
-			datas:  a.datas,
-			params: a.params,
-			querys: a.querys,
-			router: a.router,
-			index:  a.index + 1,
-		})
+		return nil
 	}
 
 	router, path, param := a.router.Match(a.Path)
@@ -89,17 +81,10 @@ func (a *Context) Next() error {
 		a.params[key[1:]] = param
 	}
 
-	return (&Context{
-		Request:        a.Request,
-		ResponseWriter: a.ResponseWriter,
-		Path:           path,
-
-		datas:  a.datas,
-		params: a.params,
-		querys: a.querys,
-		router: router,
-		index:  -len(router.middlewares),
-	}).Next()
+	ctx.Path = path
+	ctx.router = router
+	ctx.index = -len(router.middlewares)
+	return ctx.Next()
 }
 
 // Status sets the status code.

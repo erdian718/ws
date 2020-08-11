@@ -127,14 +127,17 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = Status(http.StatusOK, "")
 		return
 	}
-	err = (&Context{
-		Request:        r,
-		ResponseWriter: w,
-		Path:           path,
 
-		datas:  make(map[string]interface{}),
-		params: make(map[string]string),
-		router: a,
-		index:  -len(a.middlewares),
-	}).Next()
+	ctx := ctxPool.Get().(*Context)
+	defer ctxPool.Put(ctx)
+	ctx.Request = r
+	ctx.ResponseWriter = w
+	ctx.Path = path
+	ctx.code = 0
+	ctx.datas = make(map[string]interface{})
+	ctx.params = make(map[string]string)
+	ctx.querys = nil
+	ctx.router = a
+	ctx.index = -len(a.middlewares)
+	err = ctx.Next()
 }
