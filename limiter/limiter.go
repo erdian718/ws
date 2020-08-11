@@ -20,7 +20,7 @@ type info struct {
 }
 
 // New creates a limiter middleware.
-func New(size int64, duration time.Duration) func(*ws.Context) error {
+func New(size int64, duration time.Duration, fkey func(*ws.Context) string) func(*ws.Context) error {
 	var mdur float64
 	var stime time.Time
 	var sdur time.Duration
@@ -36,6 +36,12 @@ func New(size int64, duration time.Duration) func(*ws.Context) error {
 		}
 		stime = time.Now().Add(sdur)
 		hinfo = make(map[string]info)
+
+		if fkey == nil {
+			fkey = func(ctx *ws.Context) string {
+				return ctx.RealIP()
+			}
+		}
 	}
 
 	return func(ctx *ws.Context) error {
@@ -43,7 +49,7 @@ func New(size int64, duration time.Duration) func(*ws.Context) error {
 			ctx.Request.Body = http.MaxBytesReader(ctx.ResponseWriter, ctx.Request.Body, size)
 		}
 		if duration > 0 {
-			now, key, dur := time.Now(), ctx.RealIP(), m*mdur
+			now, key, dur := time.Now(), fkey(ctx), m*mdur
 			mutex.Lock()
 			x, ok := hinfo[key]
 			if !ok {
