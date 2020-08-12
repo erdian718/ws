@@ -2,15 +2,19 @@ package token
 
 import (
 	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/gob"
+	"errors"
 	"hash"
-	"net/http"
-	"sync"
+	"io"
 	"time"
+)
 
-	"github.com/ofunc/ws"
+// Errors.
+var (
+	ErrInvalidToken = errors.New("ws/token: invalid token")
+	ErrExpiredToken = errors.New("ws/token: expired token")
 )
 
 var (
@@ -18,104 +22,93 @@ var (
 	encoding = base64.RawURLEncoding
 )
 
-// Manager is the token manager.
-type Manager struct {
-	name   string
-	path   string
-	secure bool
-	pool   *sync.Pool
+type token struct {
+	rindex int
+	windex int
+	buf    []byte
+	bbuf   []byte
+	dec    *gob.Decoder
+	enc    *gob.Encoder
+	hs     hash.Hash
 }
 
-// New creates a new token manager.
-func New(name string, path string, secure bool, key []byte) *Manager {
-	return &Manager{
-		name:   name,
-		path:   path,
-		secure: secure,
-		pool: &sync.Pool{
-			New: func() interface{} {
-				return hmac.New(sha256.New, key)
-			},
-		},
+// Write implements the io.Writer interface.
+func (a *token) Write(p []byte) (n int, err error) {
+	n = len(p)
+	c := a.windex + n
+	if c > len(a.buf) {
+		buf := make([]byte, c+a.windex)
+		copy(buf, a.buf[:a.windex])
+		a.buf = buf
 	}
+	copy(a.buf[a.windex:], p)
+	a.windex = c
+	return
 }
 
-// New creates a new token.
-func (a *Manager) New(ctx *ws.Context, age int32, value []byte) {
-	http.SetCookie(ctx.ResponseWriter, &http.Cookie{
-		Name:     a.name,
-		Value:    a.encode(age, value),
-		MaxAge:   int(age),
-		Path:     a.path,
-		Secure:   a.secure,
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	})
-}
-
-// Delete deletes the token.
-func (a *Manager) Delete(ctx *ws.Context) {
-	http.SetCookie(ctx.ResponseWriter, &http.Cookie{
-		Name:     a.name,
-		MaxAge:   -1,
-		Path:     a.path,
-		Secure:   a.secure,
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	})
-}
-
-// Checker returns the token checker.
-func (a *Manager) Checker(renew bool) func(*ws.Context) error {
-	return func(ctx *ws.Context) error {
-		if cookie, err := ctx.Request.Cookie(a.name); err == nil {
-			if ok, upt, age, value := a.decode(cookie.Value); ok {
-				if renew && upt {
-					a.New(ctx, age, value)
-				}
-				ctx.Set(a.name, value)
-				return ctx.Next()
-			}
-		}
-		a.Delete(ctx)
-		return ws.Status(http.StatusUnauthorized, "")
+// Read implements the io.Readr interface.
+func (a *token) Read(p []byte) (n int, err error) {
+	n = copy(p, a.buf[a.rindex:a.windex])
+	a.rindex += n
+	if n < len(p) {
+		err = io.EOF
 	}
+	return
 }
 
-func (a *Manager) encode(age int32, value []byte) string {
-	buf := make([]byte, 44+len(value))
-	endian.PutUint64(buf[:8], uint64(time.Now().Unix()))
-	endian.PutUint32(buf[8:], uint32(age))
-
-	h := a.pool.Get().(hash.Hash)
-	defer a.pool.Put(h)
-	h.Reset()
-
-	h.Write(buf[:12])
-	h.Write(value)
-	copy(buf[12:], h.Sum(nil))
-	copy(buf[44:], value)
-	return encoding.EncodeToString(buf)
+// String returns the token as string.
+func (a *token) String() string {
+	n := encoding.EncodedLen(a.windex)
+	if len(a.bbuf) < n {
+		a.bbuf = make([]byte, n)
+	}
+	encoding.Encode(a.bbuf, a.buf[:a.windex])
+	return string(a.bbuf[:n])
 }
 
-func (a *Manager) decode(s string) (bool, bool, int32, []byte) {
-	buf, err := encoding.DecodeString(s)
-	if err != nil || len(buf) < 44 {
-		return false, false, 0, nil
+func (a *token) sign() {
+	a.hs.Reset()
+	a.hs.Write(a.buf[:12])
+	a.hs.Write(a.buf[44:a.windex])
+	copy(a.buf[12:], a.hs.Sum(nil))
+}
+
+func (a *token) reset(age int, v interface{}) error {
+	endian.PutUint64(a.buf[:8], uint64(time.Now().Unix()))
+	endian.PutUint32(a.buf[8:], uint32(age))
+	a.windex = 44
+	err := a.enc.Encode(v)
+	a.sign()
+	return err
+}
+
+func (a *token) decode(s string, value interface{}, renew bool) (int, error) {
+	a.windex = encoding.DecodedLen(len(s))
+	if len(a.buf) < a.windex {
+		a.buf = make([]byte, a.windex)
+	}
+	if _, err := encoding.Decode(a.buf, []byte(s)); err != nil {
+		return 0, err
 	}
 
-	h := a.pool.Get().(hash.Hash)
-	defer a.pool.Put(h)
-	h.Reset()
-
-	h.Write(buf[:12])
-	h.Write(buf[44:])
-	if !hmac.Equal(h.Sum(nil), buf[12:44]) {
-		return false, false, 0, nil
+	a.hs.Reset()
+	a.hs.Write(a.buf[:12])
+	a.hs.Write(a.buf[44:a.windex])
+	if !hmac.Equal(a.hs.Sum(nil), a.buf[12:44]) {
+		return 0, ErrInvalidToken
 	}
 
-	stamp := int64(endian.Uint64(buf[:8]))
-	age := int64(endian.Uint32(buf[8:12]))
-	dur := time.Now().Unix() - stamp
-	return dur <= age, dur > age/2, int32(age), buf[44:]
+	now := time.Now().Unix()
+	stamp := int64(endian.Uint64(a.buf[:8]))
+	age := int64(endian.Uint32(a.buf[8:12]))
+	dur := now - stamp
+	if dur > age {
+		return int(age), ErrExpiredToken
+	}
+	if renew && dur > age/2 {
+		endian.PutUint64(a.buf[:8], uint64(now))
+		a.sign()
+	}
+	a.rindex = 44
+	return int(age), a.dec.Decode(value)
 }
