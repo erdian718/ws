@@ -28,7 +28,7 @@ func New(root string, age int, exts ...string) func(*ws.Context) error {
 
 	return func(ctx *ws.Context) error {
 		err := ctx.Next()
-		if serr, ok := err.(*ws.StatusError); !ok || serr.Code() != http.StatusNotFound {
+		if serr, ok := err.(*ws.StatusError); (ok && serr.Code() != http.StatusNotFound) || (!ok && !os.IsNotExist(err)) {
 			return err
 		}
 
