@@ -27,6 +27,14 @@ func New(size int64, duration time.Duration, fkey func(*ws.Context) string) func
 	var hinfo map[string]info
 	var cinfo map[string]info
 	var mutex sync.Mutex
+	var pool *sync.Pool
+
+	putInfoMap := func(m map[string]info) {
+		for k := range m {
+			delete(m, k)
+		}
+		pool.Put(m)
+	}
 
 	if duration > 0 {
 		mdur = duration.Seconds()
@@ -35,7 +43,13 @@ func New(size int64, duration time.Duration, fkey func(*ws.Context) string) func
 			sdur = 10 * time.Minute
 		}
 		stime = time.Now().Add(sdur)
-		hinfo = make(map[string]info)
+
+		pool = &sync.Pool{
+			New: func() interface{} {
+				return make(map[string]info)
+			},
+		}
+		hinfo = pool.Get().(map[string]info)
 
 		if fkey == nil {
 			fkey = func(ctx *ws.Context) string {
@@ -60,13 +74,15 @@ func New(size int64, duration time.Duration, fkey func(*ws.Context) string) func
 			}
 
 			if now.After(stime) {
-				stime, hinfo, cinfo = now.Add(sdur), make(map[string]info), hinfo
+				go putInfoMap(cinfo)
+				stime, hinfo, cinfo = now.Add(sdur), pool.Get().(map[string]info), hinfo
 			}
 			hinfo[key] = info{
 				dur:  dur,
 				time: now,
 			}
 			mutex.Unlock()
+
 			if dur < mdur {
 				err := ws.Status(http.StatusTooManyRequests, key)
 				if x.dur >= mdur {
