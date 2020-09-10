@@ -27,9 +27,9 @@ func New(root string, age int, exts ...string) func(*ws.Context) error {
 	}
 
 	return func(ctx *ws.Context) error {
-		err := ctx.Next()
-		if serr, ok := err.(*ws.StatusError); (ok && serr.Code() != http.StatusNotFound) || (!ok && !os.IsNotExist(err)) {
-			return err
+		oerr := ctx.Next()
+		if serr, ok := oerr.(*ws.StatusError); (ok && serr.Code() != http.StatusNotFound) || (!ok && !os.IsNotExist(oerr)) {
+			return oerr
 		}
 
 		method := ctx.Request.Method
@@ -38,10 +38,10 @@ func New(root string, age int, exts ...string) func(*ws.Context) error {
 			return ws.Status(http.StatusOK, "")
 		}
 		if method != http.MethodGet && method != http.MethodHead {
-			return ws.Status(http.StatusMethodNotAllowed, method+" "+ctx.Request.URL.Path)
+			return oerr
 		}
 		if strings.Contains(ctx.Path, "..") {
-			return ws.Status(http.StatusBadRequest, "invalid path: "+ctx.Request.URL.Path)
+			return oerr
 		}
 
 		header := ctx.ResponseWriter.Header()
@@ -50,7 +50,7 @@ func New(root string, age int, exts ...string) func(*ws.Context) error {
 		}
 		path, isgzip, err := realpath(ctx.Request.Header, mgzip, root, ctx.Path)
 		if err != nil {
-			return err
+			return oerr
 		}
 		if isgzip {
 			header.Set("Content-Encoding", "gzip")
