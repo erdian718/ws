@@ -30,6 +30,9 @@ func New(size int64, duration time.Duration, fkey func(*ws.Context) string) func
 	var pool *sync.Pool
 
 	putInfoMap := func(m map[string]info) {
+		if m == nil {
+			return
+		}
 		for k := range m {
 			delete(m, k)
 		}
