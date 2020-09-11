@@ -104,7 +104,7 @@ func (a *Server) start() {
 	defer close(a.closed)
 
 	sigint := make(chan os.Signal)
-	signal.Notify(sigint, os.Interrupt, os.Kill)
+	signal.Notify(sigint, os.Interrupt)
 	<-sigint
 
 	if err := a.Shutdown(context.Background()); err != nil {
