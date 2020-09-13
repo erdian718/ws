@@ -3,7 +3,6 @@ package token
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/gob"
 	"net/http"
 	"sync"
 
@@ -28,23 +27,23 @@ func New(name string, path string, secure bool, key []byte, value func() interfa
 		value:  value,
 		pool: &sync.Pool{
 			New: func() interface{} {
-				t := new(token)
-				t.buf = make([]byte, 512)
-				t.bbuf = make([]byte, 512)
-				t.dec = gob.NewDecoder(t)
-				t.enc = gob.NewEncoder(t)
-				t.hs = hmac.New(sha256.New, key)
-				return t
+				return &token{
+					buf:  make([]byte, 512),
+					bbuf: make([]byte, 512),
+					hs:   hmac.New(sha256.New, key),
+				}
 			},
 		},
 	}
 }
 
 // Create creates a new token.
-func (a *Manager) Create(ctx *ws.Context, age int, value interface{}) {
+func (a *Manager) Create(ctx *ws.Context, age int, value interface{}) error {
 	t := a.pool.Get().(*token)
 	defer a.pool.Put(t)
-	t.reset(age, value)
+	if err := t.reset(age, value); err != nil {
+		return err
+	}
 	http.SetCookie(ctx.ResponseWriter, &http.Cookie{
 		Name:     a.name,
 		Value:    t.String(),
@@ -54,6 +53,7 @@ func (a *Manager) Create(ctx *ws.Context, age int, value interface{}) {
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})
+	return nil
 }
 
 // Delete deletes the token.

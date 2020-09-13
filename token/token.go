@@ -4,10 +4,9 @@ import (
 	"crypto/hmac"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"hash"
-	"io"
 	"time"
 )
 
@@ -23,69 +22,58 @@ var (
 )
 
 type token struct {
-	rindex int
-	windex int
-	buf    []byte
-	bbuf   []byte
-	dec    *gob.Decoder
-	enc    *gob.Encoder
-	hs     hash.Hash
-}
-
-// Write implements the io.Writer interface.
-func (a *token) Write(p []byte) (n int, err error) {
-	n = len(p)
-	c := a.windex + n
-	if c > len(a.buf) {
-		buf := make([]byte, c+a.windex)
-		copy(buf, a.buf[:a.windex])
-		a.buf = buf
-	}
-	copy(a.buf[a.windex:], p)
-	a.windex = c
-	return
-}
-
-// Read implements the io.Readr interface.
-func (a *token) Read(p []byte) (n int, err error) {
-	n = copy(p, a.buf[a.rindex:a.windex])
-	a.rindex += n
-	if n < len(p) {
-		err = io.EOF
-	}
-	return
+	buf  []byte
+	bbuf []byte
+	hs   hash.Hash
 }
 
 // String returns the token as string.
 func (a *token) String() string {
-	n := encoding.EncodedLen(a.windex)
+	n := encoding.EncodedLen(len(a.buf))
 	if len(a.bbuf) < n {
 		a.bbuf = make([]byte, n)
 	}
-	encoding.Encode(a.bbuf, a.buf[:a.windex])
+	encoding.Encode(a.bbuf, a.buf)
 	return string(a.bbuf[:n])
 }
 
 func (a *token) sign() {
 	a.hs.Reset()
 	a.hs.Write(a.buf[:12])
-	a.hs.Write(a.buf[44:a.windex])
+	a.hs.Write(a.buf[44:])
 	copy(a.buf[12:], a.hs.Sum(nil))
 }
 
 func (a *token) reset(age int, v interface{}) error {
 	endian.PutUint64(a.buf[:8], uint64(time.Now().Unix()))
 	endian.PutUint32(a.buf[8:], uint32(age))
-	a.windex = 44
-	err := a.enc.Encode(v)
+
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	n := 44 + len(data)
+	if cap(a.buf) < n {
+		buf := make([]byte, n)
+		copy(buf, a.buf[:12])
+		a.buf = buf
+	} else {
+		a.buf = a.buf[:n]
+	}
+	copy(a.buf[44:], data)
 	a.sign()
-	return err
+	return nil
 }
 
 func (a *token) decode(s string, value interface{}, renew bool) (int, error) {
-	a.windex = encoding.DecodedLen(len(s))
-	if len(a.buf) < a.windex {
-		a.buf = make([]byte, a.windex)
+	n := encoding.DecodedLen(len(s))
+	if n < 44 {
+		return 0, ErrInvalidToken
+	}
+	if cap(a.buf) < n {
+		a.buf = make([]byte, n)
+	} else {
+		a.buf = a.buf[:n]
 	}
 	if _, err := encoding.Decode(a.buf, []byte(s)); err != nil {
 		return 0, err
@@ -93,7 +81,7 @@ func (a *token) decode(s string, value interface{}, renew bool) (int, error) {
 
 	a.hs.Reset()
 	a.hs.Write(a.buf[:12])
-	a.hs.Write(a.buf[44:a.windex])
+	a.hs.Write(a.buf[44:])
 	if !hmac.Equal(a.hs.Sum(nil), a.buf[12:44]) {
 		return 0, ErrInvalidToken
 	}
@@ -109,6 +97,5 @@ func (a *token) decode(s string, value interface{}, renew bool) (int, error) {
 		endian.PutUint64(a.buf[:8], uint64(now))
 		a.sign()
 	}
-	a.rindex = 44
-	return int(age), a.dec.Decode(value)
+	return int(age), json.Unmarshal(a.buf[44:], value)
 }
